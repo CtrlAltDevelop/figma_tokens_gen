@@ -19,7 +19,21 @@ As a dev dependency in the project you want to generate into:
 dart pub add --dev figma_tokens_gen
 ```
 
-Or globally, to use it across projects:
+Or add it to `pubspec.yaml` yourself. It is a build-time tool, so it belongs in
+`dev_dependencies` — it never ships in your app:
+
+```yaml
+dev_dependencies:
+  figma_tokens_gen: ^0.1.1
+```
+
+then:
+
+```bash
+dart pub get      # or: flutter pub get
+```
+
+Or install it globally, to use across projects without adding a dependency:
 
 ```bash
 dart pub global activate figma_tokens_gen
