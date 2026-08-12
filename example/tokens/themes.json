@@ -1,0 +1,41 @@
+{
+  "$extensions": {
+    "note": "Plugin metadata like this is ignored by the generator."
+  },
+  "primary": {
+    "primary": { "$value": { "hex": "#3B5BFF" }, "$type": "color" },
+    "dark": { "$value": { "hex": "#2440CC" }, "$type": "color" },
+    "light": { "$value": "#8FA3FF", "$type": "color" },
+    "extraLight": { "$value": "#E4E9FF", "$type": "color" }
+  },
+  "background": {
+    "bg": { "$value": "#FFFFFF", "$type": "color" },
+    "paper": { "$value": "#F7F8FA", "$type": "color" },
+    "overlay": { "$value": { "hex": "#0A0C12", "a": 0.6 }, "$type": "color" }
+  },
+  "text": {
+    "primary": { "$value": "#0A0C12", "$type": "color" },
+    "secondary": { "$value": "#3A3F4C", "$type": "color" },
+    "soft": { "$value": "#6B7280", "$type": "color" },
+    "light": { "$value": "#9CA3AF", "$type": "color" }
+  },
+  "gray": {
+    "500": { "$value": "#E5E7EB", "$type": "color" },
+    "600": { "$value": "#D1D5DB", "$type": "color" }
+  },
+  "success": {
+    "main": { "$value": "#12B76A", "$type": "color" },
+    "light": { "$value": "#D1FADF", "$type": "color" }
+  },
+  "error": {
+    "main": { "$value": "#F04438", "$type": "color" },
+    "light": { "$value": "#FEE4E2", "$type": "color" }
+  },
+  "warning": {
+    "main": { "$value": "#F79009", "$type": "color" },
+    "light": { "$value": "#FEF0C7", "$type": "color" }
+  },
+  "spacing": {
+    "sm": { "$value": 4, "$type": "dimension" }
+  }
+}
