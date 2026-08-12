@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.1.1
+
+- Fixed acronym tokens being mangled: `Naming.words` lower-cased every part, so
+  a `BG` token under `background` emitted `backgroundBg` instead of
+  `backgroundBG`. Word parts now keep their authored case, and only
+  `toSnakeCase` and the leading word of `toLowerCamelCase` lower-case
+  explicitly.
+
 ## 0.1.0
 
 Initial release.

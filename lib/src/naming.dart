@@ -76,9 +76,14 @@ abstract final class Naming {
     'yield',
   };
 
-  /// Splits an arbitrary identifier into its lowercase word parts.
+  /// Splits an arbitrary identifier into its word parts, preserving case.
   ///
-  /// `extraLight` → `[extra, light]`, `gray-600` → `[gray, 600]`.
+  /// `extraLight` → `[extra, Light]`, `gray-600` → `[gray, 600]`,
+  /// `BG` → `[BG]`.
+  ///
+  /// Case is deliberately preserved: design systems use acronym tokens like
+  /// `BG` and `USD`, and lowercasing them here would emit `backgroundBg`
+  /// instead of the `backgroundBG` the designer named.
   static List<String> words(String source) {
     final spaced = source.trim().replaceAllMapped(
           _camelBoundary,
@@ -88,7 +93,6 @@ abstract final class Naming {
         .split(_separators)
         .map((part) => part.replaceAll(_illegal, ''))
         .where((part) => part.isNotEmpty)
-        .map((part) => part.toLowerCase())
         .toList(growable: false);
   }
 
@@ -96,14 +100,15 @@ abstract final class Naming {
   static String toLowerCamelCase(String source) {
     final parts = words(source);
     if (parts.isEmpty) return '';
-    final buffer = StringBuffer(parts.first);
+    final buffer = StringBuffer(parts.first.toLowerCase());
     for (final part in parts.skip(1)) {
       buffer.write(_capitalise(part));
     }
     return _sanitise(buffer.toString());
   }
 
-  /// `extraLight` → `ExtraLight`. Returns an empty string for empty input.
+  /// `extraLight` → `ExtraLight`, `BG` → `BG`. Empty input gives an empty
+  /// string.
   static String toUpperCamelCase(String source) {
     final parts = words(source);
     if (parts.isEmpty) return '';
@@ -111,7 +116,8 @@ abstract final class Naming {
   }
 
   /// `extraLight` → `extra_light`. Returns an empty string for empty input.
-  static String toSnakeCase(String source) => words(source).join('_');
+  static String toSnakeCase(String source) =>
+      words(source).map((part) => part.toLowerCase()).join('_');
 
   /// Builds the flat constant name for a token, e.g. (`primary`, `extraLight`)
   /// → `primaryExtraLight`.
@@ -123,6 +129,8 @@ abstract final class Naming {
     return _sanitise('$categoryPart$tokenPart');
   }
 
+  /// Upper-cases the first letter and leaves the rest untouched, so an
+  /// all-caps token such as `BG` survives intact.
   static String _capitalise(String part) =>
       part.isEmpty ? part : part[0].toUpperCase() + part.substring(1);
 

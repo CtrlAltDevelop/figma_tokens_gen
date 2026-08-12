@@ -4,13 +4,14 @@ import 'package:test/test.dart';
 void main() {
   group('Naming.words', () {
     test('splits camelCase boundaries', () {
-      expect(Naming.words('extraLight'), ['extra', 'light']);
+      expect(Naming.words('extraLight'), ['extra', 'Light']);
     });
 
     test('splits separators', () {
       expect(Naming.words('gray-600'), ['gray', '600']);
       expect(Naming.words('background/paper'), ['background', 'paper']);
       expect(Naming.words('text_soft value'), ['text', 'soft', 'value']);
+      expect(Naming.words('backgroundBG'), ['background', 'BG']);
     });
 
     test('drops empty parts and illegal characters', () {

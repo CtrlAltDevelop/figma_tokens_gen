@@ -19,9 +19,11 @@ include: package:lints/recommended.yaml
 #   rules:
 #     - camel_case_types
 
-# analyzer:
-#   exclude:
-#     - path/to/excluded/files/**
+analyzer:
+  exclude:
+    # Output of the example script: generated Flutter source, which this
+    # pure-Dart package has no flutter dependency to resolve.
+    - example/generated/**
 
 # For more information about the core and recommended set of lints, see
 # https://dart.dev/go/core-lints
