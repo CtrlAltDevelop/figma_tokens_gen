@@ -86,9 +86,9 @@ abstract final class Naming {
   /// instead of the `backgroundBG` the designer named.
   static List<String> words(String source) {
     final spaced = source.trim().replaceAllMapped(
-          _camelBoundary,
-          (match) => '${match[1]} ${match[2]}',
-        );
+      _camelBoundary,
+      (match) => '${match[1]} ${match[2]}',
+    );
     return spaced
         .split(_separators)
         .map((part) => part.replaceAll(_illegal, ''))
@@ -97,14 +97,26 @@ abstract final class Naming {
   }
 
   /// `Extra Light` → `extraLight`. Returns an empty string for empty input.
-  static String toLowerCamelCase(String source) {
+  ///
+  /// The result is a valid Dart identifier — see [_sanitise]. For a map key or
+  /// any other string label, use [toLowerCamelCaseLabel] instead.
+  static String toLowerCamelCase(String source) =>
+      _sanitise(toLowerCamelCaseLabel(source));
+
+  /// `Extra Light` → `extraLight`, without the identifier escaping that
+  /// [toLowerCamelCase] applies.
+  ///
+  /// A palette key is a string, not an identifier: `500` is a perfectly good
+  /// key, and escaping it to `$500` would both rename the token and — since
+  /// the emitted literal is single-quoted — read as string interpolation.
+  static String toLowerCamelCaseLabel(String source) {
     final parts = words(source);
     if (parts.isEmpty) return '';
     final buffer = StringBuffer(parts.first.toLowerCase());
     for (final part in parts.skip(1)) {
       buffer.write(_capitalise(part));
     }
-    return _sanitise(buffer.toString());
+    return buffer.toString();
   }
 
   /// `extraLight` → `ExtraLight`, `BG` → `BG`. Empty input gives an empty
@@ -138,8 +150,9 @@ abstract final class Naming {
   /// reserved words both produce invalid Dart member names.
   static String _sanitise(String identifier) {
     if (identifier.isEmpty) return identifier;
-    final prefixed =
-        RegExp(r'^[0-9]').hasMatch(identifier) ? r'$' + identifier : identifier;
+    final prefixed = RegExp(r'^[0-9]').hasMatch(identifier)
+        ? r'$' + identifier
+        : identifier;
     return _reservedWords.contains(prefixed) ? '${prefixed}_' : prefixed;
   }
 }

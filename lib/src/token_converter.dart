@@ -42,11 +42,9 @@ class ConversionException implements Exception {
 /// This is the only class in the package that touches the filesystem; parsing
 /// and emitting stay pure so they can be tested and reused independently.
 class TokenConverter {
-  TokenConverter({
-    TokenParser? parser,
-    TokenEmitter? emitter,
-  })  : _parser = parser ?? const TokenParser(),
-        _emitter = emitter ?? const DartColorsEmitter();
+  TokenConverter({TokenParser? parser, TokenEmitter? emitter})
+    : _parser = parser ?? const TokenParser(),
+      _emitter = emitter ?? const DartColorsEmitter();
 
   final TokenParser _parser;
   final TokenEmitter _emitter;
@@ -100,14 +98,15 @@ class TokenConverter {
       throw ConversionException('Input path not found: "$inputPath".');
     }
 
-    final files = directory
-        .listSync(recursive: true, followLinks: false)
-        .whereType<File>()
-        .where((file) => p.extension(file.path).toLowerCase() == '.json')
-        .toList()
-      // Sorted so a repeated token name resolves deterministically rather
-      // than depending on filesystem enumeration order.
-      ..sort((a, b) => a.path.compareTo(b.path));
+    final files =
+        directory
+            .listSync(recursive: true, followLinks: false)
+            .whereType<File>()
+            .where((file) => p.extension(file.path).toLowerCase() == '.json')
+            .toList()
+          // Sorted so a repeated token name resolves deterministically rather
+          // than depending on filesystem enumeration order.
+          ..sort((a, b) => a.path.compareTo(b.path));
     return files;
   }
 }

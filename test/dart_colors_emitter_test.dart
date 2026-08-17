@@ -17,7 +17,7 @@ void main() {
     final source = const DartColorsEmitter().emit(_tokens);
 
     expect(source, contains('// GENERATED CODE - DO NOT MODIFY BY HAND'));
-    expect(source, contains("import 'package:flutter/material.dart';"));
+    expect(source, contains("import 'package:material_ui/material_ui.dart';"));
     expect(source, contains('abstract final class AppColors {'));
     expect(
       source,
@@ -37,6 +37,44 @@ void main() {
     expect(source, contains("'extraLight': Color(0x80AABBCC),"));
   });
 
+  test('palette keys are strings, so a digit-leading token is not escaped', () {
+    final source = const DartColorsEmitter().emit(
+      TokenSet([
+        const TokenCategory(
+          name: 'gray',
+          tokens: [ColorToken(name: '500', argb: 0xFFE5E7EB)],
+        ),
+      ]),
+    );
+
+    // r'$500' would be read as string interpolation and fail to compile.
+    expect(source, contains("'500': Color(0xFFE5E7EB),"));
+    expect(source, isNot(contains(r"'$500'")));
+    expect(source, contains('static const Color gray500 = Color(0xFFE5E7EB);'));
+  });
+
+  test('palette keys escape characters that would break the literal', () {
+    final source = const DartColorsEmitter().emit(
+      TokenSet([
+        const TokenCategory(
+          name: 'brand',
+          tokens: [ColorToken(name: r'a$b', argb: 0xFF000000)],
+        ),
+      ]),
+    );
+
+    expect(source, contains(r"'a\$b': Color(0xFF000000),"));
+  });
+
+  test('the material import can be pointed back at flutter/material', () {
+    final source = const DartColorsEmitter(
+      materialImport: DartColorsEmitter.legacyMaterialImport,
+    ).emit(_tokens);
+
+    expect(source, contains("import 'package:flutter/material.dart';"));
+    expect(source, isNot(contains('material_ui')));
+  });
+
   test('palettes can be disabled', () {
     final source = const DartColorsEmitter(emitPalettes: false).emit(_tokens);
 
@@ -53,7 +91,9 @@ void main() {
     expect(emitter.fileName, 'brand_colors.dart');
     expect(emitter.emit(_tokens), contains('abstract final class BrandColors'));
     expect(
-        emitter.emit(_tokens), contains('abstract final class BrandPalette'));
+      emitter.emit(_tokens),
+      contains('abstract final class BrandPalette'),
+    );
   });
 
   test('skips empty categories', () {

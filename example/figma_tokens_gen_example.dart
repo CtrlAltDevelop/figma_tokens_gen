@@ -30,8 +30,9 @@ Future<void> main() async {
       outputPath: 'example/generated',
     );
 
-    stdout
-        .writeln('Wrote ${result.colorCount} colours to ${result.outputFile}');
+    stdout.writeln(
+      'Wrote ${result.colorCount} colours to ${result.outputFile}',
+    );
     for (final category in result.tokens.categories) {
       stdout.writeln('  ${category.name}: ${category.tokens.length}');
     }

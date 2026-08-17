@@ -3,10 +3,7 @@ import 'package:meta/meta.dart';
 /// A single design token resolved to a concrete ARGB colour.
 @immutable
 class ColorToken {
-  const ColorToken({
-    required this.name,
-    required this.argb,
-  });
+  const ColorToken({required this.name, required this.argb});
 
   /// The token name exactly as authored in Figma (for example `extraLight`).
   final String name;

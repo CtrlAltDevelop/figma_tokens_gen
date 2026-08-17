@@ -38,10 +38,7 @@ void main() {
     });
 
     test('reads 0-255 rgb channels', () {
-      expect(
-        ColorValueParser.parse({'r': 26, 'g': 43, 'b': 60}),
-        0xFF1A2B3C,
-      );
+      expect(ColorValueParser.parse({'r': 26, 'g': 43, 'b': 60}), 0xFF1A2B3C);
     });
 
     test('returns null when channels are missing', () {

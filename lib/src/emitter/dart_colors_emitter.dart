@@ -9,6 +9,7 @@ class DartColorsEmitter implements TokenEmitter {
     this.className = defaultClassName,
     this.paletteClassName = defaultPaletteClassName,
     this.fileName = defaultFileName,
+    this.materialImport = defaultMaterialImport,
     this.emitPalettes = true,
     this.header,
   });
@@ -17,8 +18,22 @@ class DartColorsEmitter implements TokenEmitter {
   static const String defaultPaletteClassName = 'AppColorPalette';
   static const String defaultFileName = 'app_colors.dart';
 
+  /// Flutter 3.47 moved the Material widgets into their own `material_ui`
+  /// package; `dart fix --code=migrate_design_widgets` rewrites imports to it.
+  static const String defaultMaterialImport =
+      'package:material_ui/material_ui.dart';
+
+  /// The pre-3.47 import, for projects that have not migrated yet.
+  static const String legacyMaterialImport = 'package:flutter/material.dart';
+
   final String className;
   final String paletteClassName;
+
+  /// The import the generated file uses to get `Color`.
+  ///
+  /// Defaults to [defaultMaterialImport]. Set it to [legacyMaterialImport] on
+  /// a project still importing `package:flutter/material.dart`.
+  final String materialImport;
 
   @override
   final String fileName;
@@ -36,7 +51,7 @@ class DartColorsEmitter implements TokenEmitter {
       ..writeln('// Regenerate with: dart run figma_tokens_gen')
       ..writeln('// ignore_for_file: unused_field, constant_identifier_names')
       ..writeln()
-      ..writeln("import 'package:flutter/material.dart';")
+      ..writeln("import '${_escapeLiteral(materialImport)}';")
       ..writeln();
 
     _writeHeader(buffer);
@@ -48,8 +63,16 @@ class DartColorsEmitter implements TokenEmitter {
     return buffer.toString();
   }
 
+  /// Escapes a value for use inside a single-quoted Dart string literal, so a
+  /// token named `it's` or `a$b` cannot break the generated file.
+  static String _escapeLiteral(String value) => value
+      .replaceAll(r'\', r'\\')
+      .replaceAll("'", r"\'")
+      .replaceAll(r'$', r'\$');
+
   void _writeHeader(StringBuffer buffer) {
-    final text = header ??
+    final text =
+        header ??
         'Colour tokens exported from Figma.\n'
             '\n'
             'To update: change the token in Figma, re-export the JSON, then\n'
@@ -99,8 +122,10 @@ class DartColorsEmitter implements TokenEmitter {
         ..writeln('  /// Tokens under the `${category.name}` category.')
         ..writeln('  static const Map<String, Color> $field = {');
       for (final token in category.tokens) {
-        final key = Naming.toLowerCamelCase(token.name);
-        buffer.writeln("    '$key': Color(${token.hexLiteral}),");
+        final key = Naming.toLowerCamelCaseLabel(token.name);
+        buffer.writeln(
+          "    '${_escapeLiteral(key)}': Color(${token.hexLiteral}),",
+        );
       }
       buffer.writeln('  };');
     }

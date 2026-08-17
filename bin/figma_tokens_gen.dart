@@ -3,7 +3,7 @@ import 'dart:io';
 import 'package:args/args.dart';
 import 'package:figma_tokens_gen/figma_tokens_gen.dart';
 
-const _version = '0.1.0';
+const _version = '1.0.0';
 
 Future<void> main(List<String> arguments) async {
   final parser = _buildArgParser();
@@ -34,6 +34,7 @@ Future<void> main(List<String> arguments) async {
       className: args.option('class-name')!,
       paletteClassName: args.option('palette-class-name')!,
       fileName: args.option('file-name')!,
+      materialImport: args.option('material-import')!,
       emitPalettes: args.flag('palettes'),
     ),
   );
@@ -88,6 +89,14 @@ ArgParser _buildArgParser() => ArgParser()
     defaultsTo: DartColorsEmitter.defaultFileName,
     help: 'Name of the generated file.',
     valueHelp: 'file.dart',
+  )
+  ..addOption(
+    'material-import',
+    defaultsTo: DartColorsEmitter.defaultMaterialImport,
+    help:
+        'Import the generated file uses for Color. Pass\n'
+        '${DartColorsEmitter.legacyMaterialImport} on Flutter below 3.47.',
+    valueHelp: 'uri',
   )
   ..addFlag(
     'palettes',

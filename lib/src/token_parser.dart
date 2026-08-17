@@ -30,7 +30,7 @@ class TokenParser {
     r'$themes',
     r'$metadata',
     r'$description',
-    r'$type'
+    r'$type',
   };
 
   final Set<String> ignoredKeys;

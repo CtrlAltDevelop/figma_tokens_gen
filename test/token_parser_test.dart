@@ -23,6 +23,27 @@ void main() {
     expect(tokens.categories.last.tokens.single.name, 'soft');
   });
 
+  test('reads current and older export shapes mixed in one category', () {
+    // A partly re-exported token set: newer tokens carry `$value`, ones the
+    // plugin has not rewritten yet still carry `value` or a bare string.
+    final tokens = _parser.parseJson('''
+    {
+      "primary": {
+        "dtcg":   {"\$value": {"hex": "#3B5BFF"}, "\$type": "color"},
+        "legacy": {"value": "#8FA3FF"},
+        "bare":   "#E4E9FF"
+      }
+    }
+    ''');
+
+    expect(tokens.colorCount, 3);
+    expect(tokens.categories.single.tokens.map((t) => t.argb), [
+      0xFF3B5BFF,
+      0xFF8FA3FF,
+      0xFFE4E9FF,
+    ]);
+  });
+
   test('skips plugin metadata keys', () {
     final tokens = _parser.parseJson('''
     {

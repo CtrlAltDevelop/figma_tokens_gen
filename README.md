@@ -11,6 +11,27 @@ no string keys in your widget code.
 Container(color: AppColors.primaryMain);
 ```
 
+## Requirements
+
+| | Version |
+| --- | --- |
+| Dart SDK | 3.13.0 or newer |
+| Flutter (for the generated code) | 3.47.0 or newer |
+
+Flutter 3.47 moved the Material widgets into their own
+[`material_ui`](https://pub.dev/packages/material_ui) package, so that is what
+the generated file imports:
+
+```yaml
+dependencies:
+  material_ui: ^1.0.0
+```
+
+On a project still importing `package:flutter/material.dart`, pass
+`--material-import package:flutter/material.dart` and the generated file will
+use the old import instead. The generator itself is pure Dart and depends on
+neither.
+
 ## Install
 
 As a dev dependency in the project you want to generate into:
@@ -24,7 +45,7 @@ Or add it to `pubspec.yaml` yourself. It is a build-time tool, so it belongs in
 
 ```yaml
 dev_dependencies:
-  figma_tokens_gen: ^0.1.1
+  figma_tokens_gen: ^1.0.0
 ```
 
 then:
@@ -52,6 +73,7 @@ dart run figma_tokens_gen --input tokens --output lib/generated/theme
 | `--class-name` | `AppColors` | Name of the constants class |
 | `--palette-class-name` | `AppColorPalette` | Name of the palette-map class |
 | `--file-name` | `app_colors.dart` | Name of the generated file |
+| `--material-import` | `package:material_ui/material_ui.dart` | Import the generated file uses for `Color` |
 | `--no-palettes` | _(palettes on)_ | Skip the `Map<String, Color>` class |
 | `-q, --quiet` | off | Suppress progress output |
 
@@ -71,9 +93,15 @@ settings:
 }
 ```
 
-- **DTCG** — `{"$value": ...}` (Tokens Studio, the W3C draft format)
-- **Legacy** — `{"value": ...}`
+- **DTCG** — `{"$value": ...}`, the current format: the W3C draft that Figma's
+  own variable export and recent Tokens Studio versions write
+- **Legacy** — `{"value": ...}`, written by older Figma token plugins
 - **Bare** — the value directly
+
+Both the current `$`-prefixed export and older exports work as-is, so upgrading
+your Figma plugin does not require changing anything here — and the two shapes
+can be mixed within a single file, which is what a partly re-exported token set
+looks like in practice.
 
 Colour values may be `#RGB`, `#RGBA`, `#RRGGBB`, `#RRGGBBAA`, a `{"hex": ...}`
 map with an optional `a` field, or `{"r":…, "g":…, "b":…, "a":…}` channels in
@@ -86,7 +114,7 @@ Non-colour tokens (spacing, typography) and plugin metadata keys (`$extensions`,
 
 ```dart
 // GENERATED CODE - DO NOT MODIFY BY HAND
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 
 abstract final class AppColors {
   // primary
@@ -106,7 +134,9 @@ abstract final class AppColorPalette {
 
 Member names are `category` + `Token` in lowerCamelCase — `primary`/`extraLight`
 becomes `primaryExtraLight`. Names that would collide with a Dart reserved word
-get a trailing underscore; names starting with a digit get a `$` prefix.
+get a trailing underscore; names starting with a digit get a `$` prefix. Palette
+map keys are strings, so they keep the token name as authored — a `500` token is
+`AppColorPalette.gray['500']`.
 
 The output contains **no timestamp**, so re-running the generator with unchanged
 tokens produces no diff.
