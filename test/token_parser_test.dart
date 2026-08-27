@@ -100,4 +100,172 @@ void main() {
   test('throws when the root is not an object', () {
     expect(() => _parser.parseJson('[]'), throwsA(isA<TokenParseException>()));
   });
+
+  group('nested groups', () {
+    test('flattens a group below the category into the token name', () {
+      // What Figma's native Variables export writes for `color/brand/*`.
+      final tokens = _parser.parseJson(r'''
+      {
+        "color": {
+          "brand": {
+            "primary": {"$value": "#3B5BFF", "$type": "color"},
+            "onPrimary": {"$value": "#FFFFFF", "$type": "color"}
+          },
+          "surface": {"$value": "#F7F8FA", "$type": "color"}
+        }
+      }
+      ''');
+
+      expect(tokens.categories.single.name, 'color');
+      expect(tokens.categories.single.tokens.map((t) => t.name), [
+        'brand/primary',
+        'brand/onPrimary',
+        'surface',
+      ]);
+      expect(tokens.colorCount, 3);
+    });
+
+    test('descends to any depth', () {
+      final tokens = _parser.parseJson(r'''
+      {"a": {"b": {"c": {"d": {"$value": "#010203"}}}}}
+      ''');
+
+      expect(tokens.categories.single.tokens.single.name, 'b/c/d');
+      expect(tokens.categories.single.tokens.single.argb, 0xFF010203);
+    });
+
+    test('a bare rgb map is a value, not a group to descend into', () {
+      final tokens = _parser.parseJson('''
+      {"primary": {"main": {"r": 26, "g": 43, "b": 60}}}
+      ''');
+
+      expect(tokens.categories.single.tokens.single.argb, 0xFF1A2B3C);
+    });
+
+    test('warns about a token at the root, which has no category', () {
+      final tokens = _parser.parseJson(r'''
+      {"white": {"$value": "#FFFFFF"}, "text": {"soft": "#112233"}}
+      ''');
+
+      expect(tokens.categories.map((c) => c.name), ['text']);
+      expect(tokens.warnings.single, contains('"white"'));
+    });
+
+    test('merges nested groups across documents rather than replacing', () {
+      final tokens = _parser.parseDocuments([
+        _parser.documentOf('{"color": {"brand": {"primary": "#000000"}}}'),
+        _parser.documentOf('{"color": {"brand": {"accent": "#FFFFFF"}}}'),
+      ]);
+
+      expect(tokens.categories.single.tokens.map((t) => t.name), [
+        'brand/primary',
+        'brand/accent',
+      ]);
+    });
+
+    test('parseDocuments does not modify the documents it is given', () {
+      final first = _parser.documentOf(
+        '{"color": {"brand": {"a": "#000000"}}}',
+      );
+      final second = _parser.documentOf(
+        '{"color": {"brand": {"b": "#FFFFFF"}}}',
+      );
+
+      _parser.parseDocuments([first, second]);
+
+      final brand = (first['color']! as Map)['brand']! as Map;
+      expect(brand.keys, ['a'], reason: 'the input map must be untouched');
+    });
+  });
+
+  group('aliases', () {
+    test('follows a {group.token} reference', () {
+      final tokens = _parser.parseJson(r'''
+      {
+        "primitive": {"blue500": {"$value": "#3B5BFF", "$type": "color"}},
+        "action": {"default": {"$value": "{primitive.blue500}"}}
+      }
+      ''');
+
+      expect(tokens.warnings, isEmpty);
+      expect(tokens.categories.last.tokens.single.argb, 0xFF3B5BFF);
+    });
+
+    test('resolves across documents, so layers can live in separate files', () {
+      // The common Tokens Studio split: primitives in one file, the semantic
+      // layer that points at them in another.
+      final tokens = _parser.parseDocuments([
+        _parser.documentOf('{"primitive": {"blue500": "#3B5BFF"}}'),
+        _parser.documentOf(
+          r'{"action": {"main": {"$value": "{primitive.blue500}"}}}',
+        ),
+      ]);
+
+      expect(tokens.warnings, isEmpty);
+      expect(tokens.categories.last.tokens.single.argb, 0xFF3B5BFF);
+    });
+
+    test('follows a chain, and slash-separated paths, into nested groups', () {
+      final tokens = _parser.parseJson(r'''
+      {
+        "primitive": {"blue": {"500": "#3B5BFF"}},
+        "middle": {"link": {"$value": "{primitive/blue/500}"}},
+        "action": {"main": {"$value": "{middle.link}"}}
+      }
+      ''');
+
+      expect(tokens.warnings, isEmpty);
+      expect(tokens.categories.last.tokens.single.argb, 0xFF3B5BFF);
+    });
+
+    test('warns and skips when the target does not exist', () {
+      final tokens = _parser.parseJson(r'''
+      {
+        "primitive": {"blue500": "#3B5BFF"},
+        "action": {"main": {"$value": "{primitive.blue600}"}}
+      }
+      ''');
+
+      expect(tokens.categories.map((c) => c.name), ['primitive']);
+      expect(tokens.warnings.single, contains('{primitive.blue600}'));
+    });
+
+    test('warns and skips a reference to a group', () {
+      final tokens = _parser.parseJson(r'''
+      {
+        "primitive": {"blue": {"500": "#3B5BFF"}},
+        "action": {"main": {"$value": "{primitive.blue}"}}
+      }
+      ''');
+
+      expect(tokens.categories.map((c) => c.name), ['primitive']);
+      expect(tokens.warnings.single, contains('group'));
+    });
+
+    test('warns and skips a cycle instead of looping forever', () {
+      final tokens = _parser.parseJson(r'''
+      {
+        "a": {"one": {"$value": "{b.two}"}},
+        "b": {"two": {"$value": "{a.one}"}}
+      }
+      ''');
+
+      expect(tokens.categories, isEmpty);
+      expect(tokens.warnings, hasLength(2));
+      expect(tokens.warnings.first, contains('cycle'));
+    });
+
+    test('can be turned off, leaving a reference unparseable', () {
+      const literal = TokenParser(resolveAliases: false);
+      final tokens = literal.parseJson(r'''
+      {
+        "primitive": {"blue500": "#3B5BFF"},
+        "action": {"main": {"$value": "{primitive.blue500}"}}
+      }
+      ''');
+
+      expect(tokens.categories.map((c) => c.name), ['primitive']);
+      expect(tokens.warnings, isEmpty, reason: 'not treated as an alias');
+    });
+  });
 }

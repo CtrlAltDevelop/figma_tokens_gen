@@ -26,14 +26,18 @@ abstract final class ColorValueParser {
     final g = _channel(map['g']);
     final b = _channel(map['b']);
     if (r == null || g == null || b == null) return null;
-    final a = _channel(map['a'], fallback: 255) ?? 255;
+    final a = _channel(map['a'], fallback: 255)!;
     return (a << 24) | (r << 16) | (g << 8) | b;
   }
 
   /// Accepts `#RGB`, `#RGBA`, `#RRGGBB` and `#RRGGBBAA`, with or without the
   /// leading `#`. Figma writes trailing alpha; Dart wants it leading.
   static int? _fromHexString(String source) {
-    final cleaned = source.trim().replaceAll('#', '').toUpperCase();
+    final trimmed = source.trim();
+    // Only a leading `#` is a prefix; one in the middle means this is not a
+    // colour at all, and stripping it would accept `1#23456` as `123456`.
+    final cleaned = (trimmed.startsWith('#') ? trimmed.substring(1) : trimmed)
+        .toUpperCase();
     if (cleaned.isEmpty || !_hexPattern.hasMatch(cleaned)) return null;
 
     final expanded = switch (cleaned.length) {
@@ -60,6 +64,9 @@ abstract final class ColorValueParser {
   }
 
   /// Normalises a channel that may be expressed as 0..1 or 0..255.
+  ///
+  /// Returns [fallback] when [value] is not a number at all, so a caller can
+  /// distinguish "absent" from "present but unparseable" by passing `null`.
   static int? _channel(Object? value, {int? fallback}) {
     final number = switch (value) {
       final num n => n,

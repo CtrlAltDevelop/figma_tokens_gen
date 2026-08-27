@@ -103,4 +103,71 @@ void main() {
       throwsA(isA<ConversionException>()),
     );
   });
+
+  test('resolves an alias whose target is in another file', () async {
+    writeTokens('1_primitive.json', '{"primitive": {"blue500": "#3B5BFF"}}');
+    writeTokens(
+      '2_semantic.json',
+      r'{"action": {"main": {"$value": "{primitive.blue500}"}}}',
+    );
+
+    final result = await TokenConverter().convert(
+      inputPath: input,
+      outputPath: output,
+    );
+
+    expect(result.warnings, isEmpty);
+    expect(
+      File(result.outputFile).readAsStringSync(),
+      contains('static const Color actionMain = Color(0xFF3B5BFF);'),
+    );
+  });
+
+  test('reports a broken alias without failing the run', () async {
+    writeTokens('a.json', '{"primary": {"main": "#1A2B3C"}}');
+    writeTokens(
+      'b.json',
+      r'{"action": {"main": {"$value": "{primary.nope}"}}}',
+    );
+
+    final result = await TokenConverter().convert(
+      inputPath: input,
+      outputPath: output,
+    );
+
+    expect(result.colorCount, 1, reason: 'the good token still generates');
+    expect(result.warnings.single, contains('{primary.nope}'));
+  });
+
+  test('nested groups across the tree end up in one file', () async {
+    writeTokens(
+      'a.json',
+      r'{"color": {"brand": {"primary": {"$value": "#3B5BFF"}}}}',
+    );
+
+    final result = await TokenConverter().convert(
+      inputPath: input,
+      outputPath: output,
+    );
+
+    expect(
+      File(result.outputFile).readAsStringSync(),
+      contains('static const Color colorBrandPrimary = Color(0xFF3B5BFF);'),
+    );
+  });
+
+  test('a file whose only tokens are broken aliases explains why', () {
+    writeTokens('a.json', r'{"action": {"main": {"$value": "{nope.nope}"}}}');
+
+    expect(
+      () => TokenConverter().convert(inputPath: input, outputPath: output),
+      throwsA(
+        isA<ConversionException>().having(
+          (e) => e.message,
+          'message',
+          contains('{nope.nope}'),
+        ),
+      ),
+    );
+  });
 }

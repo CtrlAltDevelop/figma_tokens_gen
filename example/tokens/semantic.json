@@ -1,0 +1,22 @@
+{
+  "$metadata": {
+    "note": "A semantic layer: nested groups whose values alias the primitives in themes.json."
+  },
+  "action": {
+    "primary": {
+      "rest": { "$value": "{primary.primary}", "$type": "color" },
+      "hover": { "$value": "{primary.dark}", "$type": "color" },
+      "disabled": { "$value": "{gray.500}", "$type": "color" }
+    },
+    "danger": {
+      "rest": { "$value": "{error.main}", "$type": "color" }
+    }
+  },
+  "surface": {
+    "page": { "$value": "{background.bg}", "$type": "color" },
+    "card": {
+      "raised": { "$value": "{background.paper}", "$type": "color" },
+      "scrim": { "$value": "{background.overlay}", "$type": "color" }
+    }
+  }
+}

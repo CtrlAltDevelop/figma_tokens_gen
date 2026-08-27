@@ -108,4 +108,74 @@ void main() {
 
     expect(first, second);
   });
+
+  test('a nested token path becomes one camelCase member', () {
+    final source = const DartColorsEmitter().emit(
+      TokenSet([
+        const TokenCategory(
+          name: 'color',
+          tokens: [ColorToken(name: 'brand/primary', argb: 0xFF3B5BFF)],
+        ),
+      ]),
+    );
+
+    expect(
+      source,
+      contains('static const Color colorBrandPrimary = Color(0xFF3B5BFF);'),
+    );
+    expect(source, contains("'brandPrimary': Color(0xFF3B5BFF),"));
+  });
+
+  test('colliding names are made unique so the output compiles', () {
+    // Flattening makes this reachable: `brand/primary` and `brandPrimary`
+    // both ask for `colorBrandPrimary`, and duplicate keys in a const map
+    // literal are a compile error outright.
+    final source = const DartColorsEmitter().emit(
+      TokenSet([
+        const TokenCategory(
+          name: 'color',
+          tokens: [
+            ColorToken(name: 'brand/primary', argb: 0xFF000001),
+            ColorToken(name: 'brandPrimary', argb: 0xFF000002),
+          ],
+        ),
+      ]),
+    );
+
+    expect(source, contains('Color colorBrandPrimary = Color(0xFF000001);'));
+    expect(source, contains('Color colorBrandPrimary2 = Color(0xFF000002);'));
+    expect(source, contains("'brandPrimary': Color(0xFF000001),"));
+    expect(source, contains("'brandPrimary2': Color(0xFF000002),"));
+    expect(source, contains('Renamed to'), reason: 'renames are visible');
+  });
+
+  test('the same palette key may be reused in a different category', () {
+    final source = const DartColorsEmitter().emit(
+      TokenSet([
+        const TokenCategory(
+          name: 'light',
+          tokens: [ColorToken(name: 'bg', argb: 0xFFFFFFFF)],
+        ),
+        const TokenCategory(
+          name: 'dark',
+          tokens: [ColorToken(name: 'bg', argb: 0xFF000000)],
+        ),
+      ]),
+    );
+
+    expect(source, contains("'bg': Color(0xFFFFFFFF),"));
+    expect(source, contains("'bg': Color(0xFF000000),"));
+    expect(source, isNot(contains('bg2')));
+  });
+
+  test('a quote or newline in the import cannot break the import line', () {
+    // Palette keys are normalised by Naming before they get here, so the
+    // literal escaping exists for the one string that reaches the output
+    // verbatim: the --material-import value.
+    final source = const DartColorsEmitter(
+      materialImport: "package:a'b\nc/d.dart",
+    ).emit(_tokens);
+
+    expect(source, contains(r"import 'package:a\'b\nc/d.dart';"));
+  });
 }

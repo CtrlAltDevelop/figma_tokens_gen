@@ -25,6 +25,9 @@ class ConversionResult {
 
   int get colorCount => tokens.colorCount;
   int get categoryCount => tokens.categories.length;
+
+  /// Tokens that were understood but skipped — see [TokenSet.warnings].
+  List<String> get warnings => tokens.warnings;
 }
 
 /// Thrown when a run cannot produce output.
@@ -62,18 +65,21 @@ class TokenConverter {
       throw ConversionException('No .json token files found in "$inputPath".');
     }
 
-    final documents = <List<TokenCategory>>[];
+    // Decoded first and interpreted together, so an alias in one file can
+    // point at a token defined in another.
+    final documents = <Map<String, Object?>>[];
     for (final file in files) {
       documents.add(
-        _parser.categoriesOf(await file.readAsString(), source: file.path),
+        _parser.documentOf(await file.readAsString(), source: file.path),
       );
     }
 
-    final tokens = _parser.merge(documents);
+    final tokens = _parser.parseDocuments(documents);
     if (tokens.isEmpty) {
       throw ConversionException(
         'Parsed ${files.length} file(s) but found no colour tokens. '
-        'Check that values are under a "\$value" or "value" key.',
+        'Check that values are under a "\$value" or "value" key.'
+        '${tokens.warnings.isEmpty ? '' : '\n${tokens.warnings.join('\n')}'}',
       );
     }
 

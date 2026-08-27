@@ -49,7 +49,7 @@ class DartColorsEmitter implements TokenEmitter {
     final buffer = StringBuffer()
       ..writeln('// GENERATED CODE - DO NOT MODIFY BY HAND')
       ..writeln('// Regenerate with: dart run figma_tokens_gen')
-      ..writeln('// ignore_for_file: unused_field, constant_identifier_names')
+      ..writeln('// ignore_for_file: constant_identifier_names')
       ..writeln()
       ..writeln("import '${_escapeLiteral(materialImport)}';")
       ..writeln();
@@ -68,7 +68,35 @@ class DartColorsEmitter implements TokenEmitter {
   static String _escapeLiteral(String value) => value
       .replaceAll(r'\', r'\\')
       .replaceAll("'", r"\'")
-      .replaceAll(r'$', r'\$');
+      .replaceAll(r'$', r'\$')
+      // A raw newline inside a single-quoted literal does not compile.
+      .replaceAll('\n', r'\n')
+      .replaceAll('\r', r'\r');
+
+  /// Returns [candidate] if nothing has claimed it yet, otherwise the first
+  /// numbered variant that is free, recording the result in [taken].
+  ///
+  /// Flattening nested groups makes collisions reachable: `brand/primary` and
+  /// `brandPrimary` under the same category both want `brandPrimary`. Two
+  /// members of that name would not compile, and two identical keys in a
+  /// `const` map literal are an error outright — so uniqueness is enforced
+  /// here, deterministically, and the rename is called out in the output.
+  static String _unique(String candidate, Set<String> taken) {
+    if (taken.add(candidate)) return candidate;
+    for (var suffix = 2; ; suffix++) {
+      final variant = '$candidate$suffix';
+      if (taken.add(variant)) return variant;
+    }
+  }
+
+  /// The comment written above a member the collision rule had to rename.
+  ///
+  /// Split across two lines so the generated file stays inside 80 columns for
+  /// realistic token names.
+  static String _renameNote(String indent, String authored, String emitted) =>
+      '$indent// `$authored` collides with an earlier token in this '
+      'category.\n'
+      '$indent// Renamed to `$emitted`.\n';
 
   void _writeHeader(StringBuffer buffer) {
     final text =
@@ -91,6 +119,7 @@ class DartColorsEmitter implements TokenEmitter {
 
   String _membersOf(TokenSet tokens) {
     final buffer = StringBuffer();
+    final taken = <String>{};
     var first = true;
     for (final category in tokens.categories) {
       if (category.isEmpty) continue;
@@ -98,7 +127,11 @@ class DartColorsEmitter implements TokenEmitter {
       first = false;
       buffer.writeln('  // ${category.name}');
       for (final token in category.tokens) {
-        final name = Naming.memberName(category.name, token.name);
+        final requested = Naming.memberName(category.name, token.name);
+        final name = _unique(requested, taken);
+        if (name != requested) {
+          buffer.write(_renameNote('  ', token.name, name));
+        }
         buffer.writeln(
           '  static const Color $name = Color(${token.hexLiteral});',
         );
@@ -121,8 +154,13 @@ class DartColorsEmitter implements TokenEmitter {
       buffer
         ..writeln('  /// Tokens under the `${category.name}` category.')
         ..writeln('  static const Map<String, Color> $field = {');
+      final taken = <String>{};
       for (final token in category.tokens) {
-        final key = Naming.toLowerCamelCaseLabel(token.name);
+        final requested = Naming.toLowerCamelCaseLabel(token.name);
+        final key = _unique(requested, taken);
+        if (key != requested) {
+          buffer.write(_renameNote('    ', token.name, key));
+        }
         buffer.writeln(
           "    '${_escapeLiteral(key)}': Color(${token.hexLiteral}),",
         );

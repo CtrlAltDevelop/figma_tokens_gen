@@ -75,13 +75,14 @@ dart run figma_tokens_gen --input tokens --output lib/generated/theme
 | `--file-name` | `app_colors.dart` | Name of the generated file |
 | `--material-import` | `package:material_ui/material_ui.dart` | Import the generated file uses for `Color` |
 | `--no-palettes` | _(palettes on)_ | Skip the `Map<String, Color>` class |
-| `-q, --quiet` | off | Suppress progress output |
+| `--strict` | off | Exit non-zero if any token was skipped |
+| `-q, --quiet` | off | Suppress progress output (warnings still print) |
 
 ## Input
 
-Every top-level object is a **category**; every object inside it is a **token**.
-Three value shapes are accepted, so you should not have to change your export
-settings:
+Every top-level object is a **category**; objects inside it are **tokens**, or
+further groups of tokens. Three value shapes are accepted, so you should not
+have to change your export settings:
 
 ```json
 {
@@ -109,6 +110,61 @@ either 0–1 or 0–255 form.
 
 Non-colour tokens (spacing, typography) and plugin metadata keys (`$extensions`,
 `$themes`, `$metadata`) are skipped.
+
+### Nested groups
+
+Groups nest to any depth, which is how Figma's own Variables export writes a
+name like `color/brand/primary`. The top-level key stays the category and the
+rest becomes the token name:
+
+```json
+{
+  "color": {
+    "brand": { "primary": { "$value": "#3B5BFF" } },
+    "surface": { "$value": "#F7F8FA" }
+  }
+}
+```
+
+```dart
+static const Color colorBrandPrimary = Color(0xFF3B5BFF);
+static const Color colorSurface = Color(0xFFF7F8FA);
+```
+
+The palette key drops the category the same way it always has, so the token
+above is `AppColorPalette.color['brandPrimary']`.
+
+### Aliases
+
+A `{group.token}` value is followed to the token it names — the reference a
+semantic layer uses to point at a primitive one:
+
+```json
+{
+  "primitive": { "blue500": { "$value": "#3B5BFF" } },
+  "action":    { "primary": { "$value": "{primitive.blue500}" } }
+}
+```
+
+Both `AppColors.primitiveBlue500` and `AppColors.actionPrimary` come out as
+`Color(0xFF3B5BFF)`. References resolve after every input file is merged, so
+the primitive may live in a different file from the token pointing at it —
+which is how Tokens Studio splits them. Chains and `/`-separated paths work
+too.
+
+A reference that names nothing, or a cycle, is **reported rather than silently
+dropped**:
+
+```
+Warning: Token "action/primary" references "{primitive.blue600}", which no
+token defines. It was skipped.
+```
+
+Warnings go to stderr and print even under `--quiet`, because a skipped token
+is a token missing from the generated file, not progress noise. The rest of the
+tokens still generate; pass `--strict` to make a warning fail the run, which is
+what you want in CI. Pass `TokenParser(resolveAliases: false)` to go back to
+treating a reference as an ordinary unparseable value.
 
 ## Output
 
@@ -138,15 +194,24 @@ get a trailing underscore; names starting with a digit get a `$` prefix. Palette
 map keys are strings, so they keep the token name as authored — a `500` token is
 `AppColorPalette.gray['500']`.
 
+Because nesting is flattened, two tokens can ask for the same name —
+`brand/primary` and `brandPrimary` both want `colorBrandPrimary`. The second
+one gets a `2` suffix and a comment in the generated file saying so, since two
+members of one name (or two identical keys in a `const` map) would not compile.
+
 The output contains **no timestamp**, so re-running the generator with unchanged
 tokens produces no diff.
 
 ## Multiple files
 
 When `--input` is a directory, every `.json` file under it is read in sorted
-path order and merged. Categories combine; a token declared twice is taken from
-the file that sorts last. Sorting is what makes the merge deterministic across
-machines and CI.
+path order and merged. Categories and nested groups combine; a token declared
+twice is taken from the file that sorts last. Sorting is what makes the merge
+deterministic across machines and CI.
+
+The merge happens before aliases are resolved, so a reference can cross files
+in either direction — a semantic file may point at primitives that sort after
+it.
 
 ## Library API
 
@@ -159,6 +224,14 @@ import 'package:figma_tokens_gen/figma_tokens_gen.dart';
 // Parse without touching the filesystem.
 final tokens = const TokenParser().parseJson(jsonString);
 print('${tokens.colorCount} colours in ${tokens.categories.length} categories');
+for (final warning in tokens.warnings) print(warning);
+
+// Or several documents at once, so aliases can resolve across them.
+const parser = TokenParser();
+final merged = parser.parseDocuments([
+  parser.documentOf(primitivesJson),
+  parser.documentOf(semanticJson),
+]);
 
 // Emit with your own class names.
 final source = const DartColorsEmitter(className: 'BrandColors').emit(tokens);
@@ -179,7 +252,7 @@ CSS variables, Compose tokens — implement `TokenEmitter` and pass it to
 Add it to whatever runs your codegen, next to `build_runner`:
 
 ```bash
-dart run figma_tokens_gen -i tokens -o lib/generated/theme -q
+dart run figma_tokens_gen -i tokens -o lib/generated/theme -q --strict
 dart format lib/generated/theme
 ```
 

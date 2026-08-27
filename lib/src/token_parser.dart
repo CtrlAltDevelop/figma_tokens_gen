@@ -21,8 +21,22 @@ class TokenParseException implements Exception {
 ///
 /// Deliberately has no knowledge of the filesystem so it can be unit-tested
 /// against string fixtures and reused by callers that fetch tokens over HTTP.
+///
+/// Handles the two structures real exports use beyond a flat
+/// category/token pair:
+///
+/// - **Nested groups**, to any depth. Figma's native Variables export writes
+///   `color/brand/primary` as three levels of object; the leading key is the
+///   category and the rest becomes the token name, so the member is
+///   `colorBrandPrimary`.
+/// - **Aliases**, the `{group.token}` references a semantic layer uses to
+///   point at a primitive one. They resolve against every document passed to
+///   [parseDocuments] together, so the primitive may live in another file.
 class TokenParser {
-  const TokenParser({this.ignoredKeys = defaultIgnoredKeys});
+  const TokenParser({
+    this.ignoredKeys = defaultIgnoredKeys,
+    this.resolveAliases = true,
+  });
 
   /// Top-level keys that carry plugin metadata rather than design tokens.
   static const Set<String> defaultIgnoredKeys = {
@@ -33,10 +47,33 @@ class TokenParser {
     r'$type',
   };
 
+  /// How many aliases may be followed before a chain is treated as broken.
+  ///
+  /// A cycle is caught outright; this only bounds pathological depth.
+  static const int maxAliasHops = 32;
+
   final Set<String> ignoredKeys;
 
+  /// Whether `{group.token}` values are followed to the token they name.
+  ///
+  /// Turn it off to treat a reference as an ordinary unparseable value, which
+  /// is what versions before 1.1.0 did.
+  final bool resolveAliases;
+
+  static final RegExp _reference = RegExp(r'^\{([^{}]+)\}$');
+  static final RegExp _referenceSeparator = RegExp(r'[./]');
+
   /// Parses a single JSON document.
-  TokenSet parseJson(String json, {String? source}) {
+  TokenSet parseJson(String json, {String? source}) =>
+      parseDocuments([documentOf(json, source: source)]);
+
+  /// Parses an already-decoded token document.
+  TokenSet parseMap(Map<String, Object?> document) =>
+      parseDocuments([document]);
+
+  /// Decodes one document without interpreting it, for callers that want to
+  /// hand several to [parseDocuments] at once.
+  Map<String, Object?> documentOf(String json, {String? source}) {
     final Object? decoded;
     try {
       decoded = jsonDecode(json);
@@ -49,12 +86,25 @@ class TokenParser {
         source: source,
       );
     }
-    return parseMap(decoded);
+    return decoded;
   }
 
-  /// Parses an already-decoded token document.
-  TokenSet parseMap(Map<String, Object?> document) =>
-      merge([_categoriesOf(document)]);
+  /// Parses several documents as one token set.
+  ///
+  /// Documents are deep-merged in iteration order — groups combine, and a
+  /// token declared twice is taken from the last document that declares it —
+  /// and only then resolved, so an alias can point at a token defined in an
+  /// earlier or later file. Prefer this over [merge] for that reason; [merge]
+  /// resolves each document on its own and cannot see across files.
+  ///
+  /// The inputs are not modified.
+  TokenSet parseDocuments(Iterable<Map<String, Object?>> documents) {
+    final merged = <String, Object?>{};
+    for (final document in documents) {
+      _mergeInto(merged, document);
+    }
+    return _resolve(merged);
+  }
 
   /// Merges several parsed documents, later categories extending earlier ones
   /// of the same name. Token order is preserved; a repeated token name wins
@@ -79,60 +129,216 @@ class TokenParser {
   }
 
   /// Exposed so callers can merge across files without re-encoding to JSON.
-  List<TokenCategory> categoriesOf(String json, {String? source}) {
-    final Object? decoded;
-    try {
-      decoded = jsonDecode(json);
-    } on FormatException catch (e) {
-      throw TokenParseException('Invalid JSON: ${e.message}', source: source);
+  ///
+  /// Aliases resolve only within this one document; use [parseDocuments] when
+  /// the target may be in another file.
+  List<TokenCategory> categoriesOf(String json, {String? source}) =>
+      parseJson(json, source: source).categories;
+
+  // --- structure -----------------------------------------------------------
+
+  /// Deep-merges [source] into [target], copying every map it takes so the
+  /// caller's document is never aliased into the result — [parseDocuments]
+  /// promises not to modify its inputs.
+  void _mergeInto(Map<String, Object?> target, Map<String, Object?> source) {
+    for (final entry in source.entries) {
+      final existing = target[entry.key];
+      final incoming = entry.value;
+      if (_isGroup(existing) && _isGroup(incoming)) {
+        _mergeInto(_asMap(existing)!, _asMap(incoming)!);
+      } else {
+        target[entry.key] = _copy(incoming);
+      }
     }
-    if (decoded is! Map<String, Object?>) {
-      throw TokenParseException(
-        'Expected a JSON object at the root, got ${decoded.runtimeType}',
-        source: source,
-      );
-    }
-    return _categoriesOf(decoded);
   }
 
-  List<TokenCategory> _categoriesOf(Map<String, Object?> document) {
+  static Object? _copy(Object? value) {
+    final map = _asMap(value);
+    if (map == null) return value;
+    return <String, Object?>{
+      for (final entry in map.entries) entry.key: _copy(entry.value),
+    };
+  }
+
+  static Map<String, Object?>? _asMap(Object? value) =>
+      value is Map<String, Object?> ? value : null;
+
+  /// Whether a node holds child tokens rather than a value of its own.
+  ///
+  /// A bare colour map (`{"hex": …}`, `{"r": …}`) is a value, not a group,
+  /// even though it carries neither wrapper key.
+  static bool _isGroup(Object? value) {
+    final map = _asMap(value);
+    if (map == null) return false;
+    if (map.containsKey(r'$value') || map.containsKey('value')) return false;
+    return ColorValueParser.parse(map) == null;
+  }
+
+  TokenSet _resolve(Map<String, Object?> document) {
+    final warnings = <String>[];
     final categories = <TokenCategory>[];
+
     for (final entry in document.entries) {
       if (ignoredKeys.contains(entry.key)) continue;
       final value = entry.value;
       if (value is! Map<String, Object?>) continue;
-      final tokens = _tokensOf(value);
+
+      if (!_isGroup(value)) {
+        // A token at the root has no category to prefix its name with, which
+        // is the one shape this generator cannot name. Say so rather than
+        // dropping it silently.
+        warnings.add(
+          'Token "${entry.key}" sits at the root of the document, outside any '
+          'category, and was skipped.',
+        );
+        continue;
+      }
+
+      final tokens = <ColorToken>[];
+      _collect(
+        group: value,
+        path: const [],
+        root: document,
+        category: entry.key,
+        out: tokens,
+        warnings: warnings,
+      );
       if (tokens.isNotEmpty) {
-        categories.add(TokenCategory(name: entry.key, tokens: tokens));
+        categories.add(
+          TokenCategory(
+            name: entry.key,
+            tokens: tokens.toList(growable: false),
+          ),
+        );
       }
     }
-    return categories;
+
+    return TokenSet(
+      categories.toList(growable: false),
+      warnings: warnings.toList(growable: false),
+    );
   }
 
-  List<ColorToken> _tokensOf(Map<String, Object?> category) {
-    final tokens = <ColorToken>[];
-    for (final entry in category.entries) {
+  /// Walks one category, descending through nested groups and appending a
+  /// [ColorToken] for every leaf that resolves to a colour.
+  void _collect({
+    required Map<String, Object?> group,
+    required List<String> path,
+    required Map<String, Object?> root,
+    required String category,
+    required List<ColorToken> out,
+    required List<String> warnings,
+  }) {
+    for (final entry in group.entries) {
       if (ignoredKeys.contains(entry.key)) continue;
-      final argb = _valueOf(entry.value);
-      if (argb != null) {
-        tokens.add(ColorToken(name: entry.key, argb: argb));
+      final childPath = [...path, entry.key];
+
+      if (_isGroup(entry.value)) {
+        _collect(
+          group: _asMap(entry.value)!,
+          path: childPath,
+          root: root,
+          category: category,
+          out: out,
+          warnings: warnings,
+        );
+        continue;
       }
+
+      final name = childPath.join('/');
+      final argb = _valueOf(
+        entry.value,
+        root: root,
+        label: '$category/$name',
+        warnings: warnings,
+      );
+      if (argb != null) out.add(ColorToken(name: name, argb: argb));
     }
-    return tokens;
   }
 
-  /// Resolves one token entry to a colour, accepting the three shapes seen in
-  /// real exports: a DTCG wrapper (`{"$value": ...}`), the legacy wrapper
-  /// (`{"value": ...}`), and a bare value (`"#RRGGBB"` or an rgb map).
-  int? _valueOf(Object? entry) {
-    if (entry is Map<String, Object?>) {
-      if (entry.containsKey(r'$value')) {
-        return ColorValueParser.parse(entry[r'$value']);
+  // --- values --------------------------------------------------------------
+
+  /// Resolves one token entry to a colour, following any alias chain.
+  ///
+  /// Accepts the three shapes seen in real exports: a DTCG wrapper
+  /// (`{"$value": …}`), the legacy wrapper (`{"value": …}`), and a bare value
+  /// (`"#RRGGBB"` or an rgb map). Returns `null` for anything that is not a
+  /// colour — a spacing token, a broken alias — and records a warning in the
+  /// cases a design team would want to know about.
+  int? _valueOf(
+    Object? entry, {
+    required Map<String, Object?> root,
+    required String label,
+    required List<String> warnings,
+  }) {
+    var node = entry;
+    final visited = <String>{};
+
+    for (var hop = 0; hop <= maxAliasHops; hop++) {
+      final raw = _unwrap(node);
+      final reference = _referenceOf(raw);
+      if (reference == null) return ColorValueParser.parse(raw);
+
+      if (!visited.add(reference)) {
+        warnings.add(
+          'Token "$label" is part of an alias cycle through '
+          '"{$reference}" and was skipped.',
+        );
+        return null;
       }
-      if (entry.containsKey('value')) {
-        return ColorValueParser.parse(entry['value']);
+
+      final target = _lookup(root, reference);
+      if (target == null) {
+        warnings.add(
+          'Token "$label" references "{$reference}", which no token defines. '
+          'It was skipped.',
+        );
+        return null;
       }
+      if (_isGroup(target)) {
+        warnings.add(
+          'Token "$label" references "{$reference}", which is a group of '
+          'tokens rather than a single token. It was skipped.',
+        );
+        return null;
+      }
+      node = target;
     }
-    return ColorValueParser.parse(entry);
+
+    warnings.add(
+      'Token "$label" was skipped: its alias chain is longer than '
+      '$maxAliasHops references.',
+    );
+    return null;
+  }
+
+  /// Strips the DTCG or legacy wrapper from a token node, if it has one.
+  static Object? _unwrap(Object? node) {
+    final map = _asMap(node);
+    if (map == null) return node;
+    if (map.containsKey(r'$value')) return map[r'$value'];
+    if (map.containsKey('value')) return map['value'];
+    return node;
+  }
+
+  /// The path inside a `{group.token}` reference, or `null` if [raw] is not
+  /// one.
+  String? _referenceOf(Object? raw) {
+    if (!resolveAliases || raw is! String) return null;
+    final match = _reference.firstMatch(raw.trim());
+    final path = match?.group(1)?.trim();
+    return (path == null || path.isEmpty) ? null : path;
+  }
+
+  /// Walks [reference] — dot- or slash-separated — down from the document
+  /// root. Returns the node it names, or `null` if the path does not exist.
+  static Object? _lookup(Map<String, Object?> root, String reference) {
+    Object? node = root;
+    for (final segment in reference.split(_referenceSeparator)) {
+      final map = _asMap(node);
+      if (map == null || !map.containsKey(segment)) return null;
+      node = map[segment];
+    }
+    return node;
   }
 }

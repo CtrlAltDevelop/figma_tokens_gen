@@ -6,6 +6,11 @@ class ColorToken {
   const ColorToken({required this.name, required this.argb});
 
   /// The token name exactly as authored in Figma (for example `extraLight`).
+  ///
+  /// For a token nested below the category, this is the remaining path joined
+  /// with `/` — `color/brand/primary` gives a category of `color` and a name
+  /// of `brand/primary`. `Naming` treats `/` as a word separator, so the
+  /// generated member is `colorBrandPrimary`.
   final String name;
 
   /// The fully opaque-or-transparent 32-bit ARGB value.
@@ -47,9 +52,18 @@ class TokenCategory {
 /// The complete result of parsing one or more Figma token files.
 @immutable
 class TokenSet {
-  const TokenSet(this.categories);
+  const TokenSet(this.categories, {this.warnings = const []});
 
   final List<TokenCategory> categories;
+
+  /// Human-readable notes about tokens that were understood but skipped — an
+  /// alias pointing at a token that does not exist, a reference cycle.
+  ///
+  /// Parsing does not fail on these, because one bad alias in a large export
+  /// should not block generating the rest. They are reported so a typo does
+  /// not vanish silently: the CLI prints them to stderr, and `--strict` turns
+  /// them into a non-zero exit for CI.
+  final List<String> warnings;
 
   /// Total number of colour tokens across every category.
   int get colorCount =>

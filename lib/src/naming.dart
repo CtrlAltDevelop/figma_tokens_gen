@@ -6,6 +6,7 @@ abstract final class Naming {
   static final RegExp _camelBoundary = RegExp(r'([a-z0-9])([A-Z])');
   static final RegExp _separators = RegExp(r'[-_\s/.]+');
   static final RegExp _illegal = RegExp(r'[^A-Za-z0-9_$]');
+  static final RegExp _leadingDigit = RegExp(r'^[0-9]');
 
   /// Reserved words that cannot be used bare as Dart member names.
   static const _reservedWords = <String>{
@@ -150,7 +151,7 @@ abstract final class Naming {
   /// reserved words both produce invalid Dart member names.
   static String _sanitise(String identifier) {
     if (identifier.isEmpty) return identifier;
-    final prefixed = RegExp(r'^[0-9]').hasMatch(identifier)
+    final prefixed = _leadingDigit.hasMatch(identifier)
         ? r'$' + identifier
         : identifier;
     return _reservedWords.contains(prefixed) ? '${prefixed}_' : prefixed;

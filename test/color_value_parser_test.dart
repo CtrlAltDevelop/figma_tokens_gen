@@ -52,4 +52,11 @@ void main() {
     expect(ColorValueParser.parse(42), isNull);
     expect(ColorValueParser.parse(<String>['#fff']), isNull);
   });
+
+  test('a hash anywhere but the front is not a colour', () {
+    // Stripping every `#` would have read this as the valid hex `123456`.
+    expect(ColorValueParser.parse('1#23456'), isNull);
+    expect(ColorValueParser.parse('#1A2B3C'), 0xFF1A2B3C);
+    expect(ColorValueParser.parse('1A2B3C'), 0xFF1A2B3C);
+  });
 }

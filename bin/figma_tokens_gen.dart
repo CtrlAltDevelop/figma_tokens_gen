@@ -3,7 +3,7 @@ import 'dart:io';
 import 'package:args/args.dart';
 import 'package:figma_tokens_gen/figma_tokens_gen.dart';
 
-const _version = '1.0.0';
+const _version = '1.1.0';
 
 Future<void> main(List<String> arguments) async {
   final parser = _buildArgParser();
@@ -44,7 +44,14 @@ Future<void> main(List<String> arguments) async {
       inputPath: args.option('input')!,
       outputPath: args.option('output')!,
     );
+    _reportWarnings(result.warnings);
     if (!quiet) _report(result);
+    if (args.flag('strict') && result.warnings.isNotEmpty) {
+      stderr.writeln(
+        'Error: ${result.warnings.length} warning(s) with --strict.',
+      );
+      exitCode = 1;
+    }
   } on ConversionException catch (e) {
     stderr.writeln('Error: ${e.message}');
     exitCode = 1;
@@ -103,7 +110,19 @@ ArgParser _buildArgParser() => ArgParser()
     defaultsTo: true,
     help: 'Also emit Map<String, Color> palettes grouped by category.',
   )
-  ..addFlag('quiet', abbr: 'q', negatable: false, help: 'Suppress output.')
+  ..addFlag(
+    'strict',
+    negatable: false,
+    help:
+        'Exit non-zero if any token was skipped, e.g. a broken alias.\n'
+        'Warnings are printed either way.',
+  )
+  ..addFlag(
+    'quiet',
+    abbr: 'q',
+    negatable: false,
+    help: 'Suppress progress output. Warnings are still printed.',
+  )
   ..addFlag('help', abbr: 'h', negatable: false, help: 'Show this usage.')
   ..addFlag('version', negatable: false, help: 'Print the version.');
 
@@ -113,6 +132,14 @@ Generate Flutter Color constants from Figma design-token JSON.
 Usage: dart run figma_tokens_gen [options]
 
 ${parser.usage}''';
+
+/// Printed even under `--quiet`: a skipped token is not progress noise, it is
+/// a token missing from the generated file.
+void _reportWarnings(List<String> warnings) {
+  for (final warning in warnings) {
+    stderr.writeln('Warning: $warning');
+  }
+}
 
 void _report(ConversionResult result) {
   stdout.writeln('Read ${result.inputFiles.length} token file(s):');

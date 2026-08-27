@@ -1,5 +1,55 @@
 # Changelog
 
+## 1.1.0
+
+### Added
+
+- **Nested token groups**, to any depth. Figma's native Variables export writes
+  `color/brand/primary` as three levels of object, and every token below the
+  second level was previously dropped without a word — a grouped export
+  generated an empty file and the "found no colour tokens" error. The top-level
+  key stays the category and the rest becomes the token name, so the member is
+  `colorBrandPrimary` and the palette key `brandPrimary`. A flat export is
+  unaffected.
+- **Alias resolution.** A `{group.token}` value is followed to the token it
+  names, which is how a semantic layer points at a primitive one. References
+  resolve after all input files are merged, so the target may live in another
+  file — the way Tokens Studio splits primitives from semantics. Chains and
+  `/`-separated paths work; `TokenParser(resolveAliases: false)` restores the
+  old behaviour of treating a reference as an unparseable value.
+- **Warnings** for tokens that were understood but skipped: an alias naming
+  nothing, an alias cycle, an alias pointing at a group, a token sitting at the
+  root outside any category. Previously all of these vanished silently, so a
+  typo'd reference looked like a token the designer had never added. Exposed as
+  `TokenSet.warnings` / `ConversionResult.warnings`, printed to stderr by the
+  CLI even under `--quiet`, and included in the error when nothing generates.
+- `--strict`, which exits non-zero if anything was skipped. Intended for CI, so
+  a broken reference fails the build instead of quietly shrinking the output.
+- `TokenParser.parseDocuments` and `TokenParser.documentOf`, for interpreting
+  several documents as one set. `parseDocuments` deep-merges the raw documents
+  before resolving, so nested groups combine per key instead of the whole group
+  being replaced. `categoriesOf` and `merge` still work, but resolve each
+  document alone and so cannot follow an alias across files.
+
+### Fixed
+
+- Colliding member names are now made unique. Flattening nested groups makes
+  the collision reachable — `brand/primary` and `brandPrimary` under one
+  category both want `colorBrandPrimary` — and two members of one name, or two
+  identical keys in a `const` map literal, do not compile. The second gets a
+  numeric suffix and a comment in the generated file recording the rename.
+- A hex string with a `#` anywhere but the front is no longer accepted: every
+  `#` was stripped, so `1#23456` parsed as the colour `123456`.
+- A `--material-import` containing a quote, backslash or newline no longer
+  breaks the generated import line.
+
+### Changed
+
+- Dropped the meaningless `unused_field` entry from the generated file's
+  `ignore_for_file` comment.
+- The CLI version is now pinned to `pubspec.yaml` by a test, after it drifted
+  in 1.0.0.
+
 ## 1.0.0
 
 Targets Dart 3.13 / Flutter 3.47.
