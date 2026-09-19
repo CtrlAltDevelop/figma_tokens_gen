@@ -5,6 +5,12 @@
 /// strings, the native Variables export writes `{"hex": "..."}`, and some
 /// pipelines emit `{"r": 0..1, "g": .., "b": .., "a": ..}`. All three are
 /// accepted so a design team is not forced to change their export settings.
+///
+/// The W3C colour object — `{"colorSpace": "srgb", "components": [r, g, b],
+/// "alpha": .., "hex": ..}` — is read too. Its `hex` carries no alpha, so
+/// `alpha` is applied on top of it; without a `hex`, an sRGB `components` list
+/// is used directly. Other colour spaces need a real conversion and are left
+/// to their `hex`.
 abstract final class ColorValueParser {
   static final RegExp _hexPattern = RegExp(r'^[0-9A-Fa-f]+$');
 
@@ -16,18 +22,38 @@ abstract final class ColorValueParser {
   }
 
   static int? _fromMap(Map<Object?, Object?> map) {
+    // `alpha` is the W3C spelling, `a` the older one.
+    final alpha = map['alpha'] ?? map['a'];
+
     final hex = map['hex'];
     if (hex is String) {
       final parsed = _fromHexString(hex);
-      if (parsed != null) return _applyChannelAlpha(parsed, map['a']);
+      if (parsed != null) return _applyChannelAlpha(parsed, alpha);
+    }
+
+    final rgb = _rgbChannels(map);
+    if (rgb == null) return null;
+    final (r, g, b) = rgb;
+    final a = _channel(alpha, fallback: 255)!;
+    return (a << 24) | (r << 16) | (g << 8) | b;
+  }
+
+  /// The red, green and blue channels of [map], or `null` if it does not
+  /// have all three.
+  static (int, int, int)? _rgbChannels(Map<Object?, Object?> map) {
+    final components = map['components'];
+    if (components is List) {
+      if (map['colorSpace'] != 'srgb' || components.length < 3) return null;
+      final r = _channel(components[0]);
+      final g = _channel(components[1]);
+      final b = _channel(components[2]);
+      return r == null || g == null || b == null ? null : (r, g, b);
     }
 
     final r = _channel(map['r']);
     final g = _channel(map['g']);
     final b = _channel(map['b']);
-    if (r == null || g == null || b == null) return null;
-    final a = _channel(map['a'], fallback: 255)!;
-    return (a << 24) | (r << 16) | (g << 8) | b;
+    return r == null || g == null || b == null ? null : (r, g, b);
   }
 
   /// Accepts `#RGB`, `#RGBA`, `#RRGGBB` and `#RRGGBBAA`, with or without the

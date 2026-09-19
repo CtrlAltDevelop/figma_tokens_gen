@@ -32,6 +32,12 @@ class TokenParseException implements Exception {
 /// - **Aliases**, the `{group.token}` references a semantic layer uses to
 ///   point at a primitive one. They resolve against every document passed to
 ///   [parseDocuments] together, so the primitive may live in another file.
+///
+/// A token that declares a type other than `color` — `$type` in the DTCG
+/// shape, `type` in the legacy one, either set on the token or inherited from
+/// a group — is not a colour and is left out. That matters because a bare hex
+/// string is accepted without its `#`, so an untyped-looking `"700"` (a font
+/// weight) or `"128"` (a spacing) would otherwise parse as a colour.
 class TokenParser {
   const TokenParser({
     this.ignoredKeys = defaultIgnoredKeys,
@@ -181,16 +187,19 @@ class TokenParser {
     for (final entry in document.entries) {
       if (ignoredKeys.contains(entry.key)) continue;
       final value = entry.value;
+      if (value is String) {
+        // A bare colour at the root is a token too; anything else — a title,
+        // a version string — is not worth a warning.
+        if (_looksLikeColour(value)) warnings.add(_rootTokenWarning(entry.key));
+        continue;
+      }
       if (value is! Map<String, Object?>) continue;
 
       if (!_isGroup(value)) {
         // A token at the root has no category to prefix its name with, which
         // is the one shape this generator cannot name. Say so rather than
         // dropping it silently.
-        warnings.add(
-          'Token "${entry.key}" sits at the root of the document, outside any '
-          'category, and was skipped.',
-        );
+        warnings.add(_rootTokenWarning(entry.key));
         continue;
       }
 
@@ -199,6 +208,7 @@ class TokenParser {
         group: value,
         path: const [],
         root: document,
+        inheritedType: _groupType(document),
         category: entry.key,
         out: tokens,
         warnings: warnings,
@@ -219,16 +229,33 @@ class TokenParser {
     );
   }
 
+  static String _rootTokenWarning(String key) =>
+      'Token "$key" sits at the root of the document, outside any category, '
+      'and was skipped.';
+
+  /// Whether a root-level string is plainly meant as a colour: a `#` hex or an
+  /// alias. A bare `100` could as well be a version number, so it is not.
+  bool _looksLikeColour(String value) {
+    final trimmed = value.trim();
+    return trimmed.startsWith('#')
+        ? ColorValueParser.parse(trimmed) != null
+        : _referenceOf(trimmed) != null;
+  }
+
   /// Walks one category, descending through nested groups and appending a
   /// [ColorToken] for every leaf that resolves to a colour.
+  ///
+  /// [inheritedType] is the `$type` declared by the nearest enclosing group.
   void _collect({
     required Map<String, Object?> group,
     required List<String> path,
     required Map<String, Object?> root,
+    required String? inheritedType,
     required String category,
     required List<ColorToken> out,
     required List<String> warnings,
   }) {
+    final groupType = _groupType(group) ?? inheritedType;
     for (final entry in group.entries) {
       if (ignoredKeys.contains(entry.key)) continue;
       final childPath = [...path, entry.key];
@@ -238,6 +265,7 @@ class TokenParser {
           group: _asMap(entry.value)!,
           path: childPath,
           root: root,
+          inheritedType: groupType,
           category: category,
           out: out,
           warnings: warnings,
@@ -248,6 +276,7 @@ class TokenParser {
       final name = childPath.join('/');
       final argb = _valueOf(
         entry.value,
+        inheritedType: groupType,
         root: root,
         label: '$category/$name',
         warnings: warnings,
@@ -265,16 +294,24 @@ class TokenParser {
   /// (`"#RRGGBB"` or an rgb map). Returns `null` for anything that is not a
   /// colour — a spacing token, a broken alias — and records a warning in the
   /// cases a design team would want to know about.
+  ///
+  /// [inheritedType] is the `$type` the entry's group declares. The type of
+  /// every token along an alias chain is checked, so an alias to a font weight
+  /// is no more a colour than the font weight itself.
   int? _valueOf(
     Object? entry, {
+    required String? inheritedType,
     required Map<String, Object?> root,
     required String label,
     required List<String> warnings,
   }) {
     var node = entry;
+    var inherited = inheritedType;
     final visited = <String>{};
 
     for (var hop = 0; hop <= maxAliasHops; hop++) {
+      if (!_isColourType(_typeOf(node) ?? inherited)) return null;
+
       final raw = _unwrap(node);
       final reference = _referenceOf(raw);
       if (reference == null) return ColorValueParser.parse(raw);
@@ -287,7 +324,8 @@ class TokenParser {
         return null;
       }
 
-      final target = _lookup(root, reference);
+      final found = _lookup(root, reference);
+      final target = found?.node;
       if (target == null) {
         warnings.add(
           'Token "$label" references "{$reference}", which no token defines. '
@@ -303,6 +341,7 @@ class TokenParser {
         return null;
       }
       node = target;
+      inherited = found!.inheritedType;
     }
 
     warnings.add(
@@ -321,6 +360,27 @@ class TokenParser {
     return node;
   }
 
+  /// The type a token node declares for itself, or `null` when it declares
+  /// none. Only a wrapper can: `$type`, or `type` in the legacy shape.
+  static String? _typeOf(Object? node) {
+    final map = _asMap(node);
+    if (map == null) return null;
+    if (!map.containsKey(r'$value') && !map.containsKey('value')) return null;
+    final type = map[r'$type'] ?? map['type'];
+    return type is String ? type : null;
+  }
+
+  /// The `$type` a group declares for the tokens below it, if any.
+  static String? _groupType(Map<String, Object?> group) {
+    final type = group[r'$type'];
+    return type is String ? type : null;
+  }
+
+  /// An undeclared type is given the benefit of the doubt: plenty of exports
+  /// never write one, and their values are colours.
+  static bool _isColourType(String? type) =>
+      type == null || type.trim().toLowerCase() == 'color';
+
   /// The path inside a `{group.token}` reference, or `null` if [raw] is not
   /// one.
   String? _referenceOf(Object? raw) {
@@ -331,14 +391,20 @@ class TokenParser {
   }
 
   /// Walks [reference] — dot- or slash-separated — down from the document
-  /// root. Returns the node it names, or `null` if the path does not exist.
-  static Object? _lookup(Map<String, Object?> root, String reference) {
+  /// root. Returns the node it names along with the `$type` its enclosing
+  /// groups declare, or `null` if the path does not exist.
+  static ({Object? node, String? inheritedType})? _lookup(
+    Map<String, Object?> root,
+    String reference,
+  ) {
     Object? node = root;
+    String? inheritedType;
     for (final segment in reference.split(_referenceSeparator)) {
       final map = _asMap(node);
       if (map == null || !map.containsKey(segment)) return null;
+      inheritedType = _groupType(map) ?? inheritedType;
       node = map[segment];
     }
-    return node;
+    return (node: node, inheritedType: inheritedType);
   }
 }

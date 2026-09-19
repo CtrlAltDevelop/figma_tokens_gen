@@ -1,5 +1,35 @@
 # Changelog
 
+## 1.1.2
+
+### Fixed
+
+- **Non-colour tokens were emitted as colours.** A bare hex string is accepted
+  without its `#`, so any 3-, 4-, 6- or 8-character value made of hex digits
+  parsed as a colour: a font weight of `"700"` became `#770000`, a font size of
+  `"1234"` became `#11223344`, and a spacing of `"128"` became `#112288`, each
+  landing in the generated file as a `Color`. Tokens Studio writes those values
+  as strings. A token that declares a type other than `color` — `$type` or
+  `type`, on the token or inherited from a group, and along an alias chain — is
+  now left out. A token with no declared type behaves as before.
+- **`alpha` on a W3C colour object was ignored.** Figma's variable export writes
+  a translucent colour as `{"hex": "#3366CC", "alpha": 0.5, …}`, and the alpha
+  was dropped, generating the colour fully opaque. `alpha` is now applied, and
+  an sRGB `components` list is read when there is no `hex`.
+- **`$themes.json` failed the whole run.** Tokens Studio writes it next to the
+  token sets as an array, which is not a token document, so a directory export
+  stopped with "Expected a JSON object at the root". It and `$metadata.json`
+  are now skipped when reading a directory.
+- **A colour at the document root vanished without a warning**, though the
+  warning for a root-level token was written for exactly this. A root string
+  that is a `#` hex or an alias is now reported.
+- **The generated palette class could fail to compile.** Two categories that
+  camel-case alike (`Primary` and `primary`) emitted two fields of one name,
+  and a category or token whose name holds no letters or digits emitted an
+  empty identifier. Fields are now numbered on collision, with a comment, the
+  way members already were, and an empty name falls back to `category` or
+  `color`.
+
 ## 1.1.1
 
 - No change to the published code. CI moved to the shared reusable workflow in

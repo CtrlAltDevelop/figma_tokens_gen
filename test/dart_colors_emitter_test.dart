@@ -168,6 +168,42 @@ void main() {
     expect(source, isNot(contains('bg2')));
   });
 
+  test('categories that camel-case alike get distinct palette fields', () {
+    // `Primary` and `primary` are separate categories in the JSON, but two
+    // static fields of one name would not compile.
+    final source = const DartColorsEmitter().emit(
+      TokenSet([
+        const TokenCategory(
+          name: 'Primary',
+          tokens: [ColorToken(name: 'a', argb: 0xFF000001)],
+        ),
+        const TokenCategory(
+          name: 'primary',
+          tokens: [ColorToken(name: 'b', argb: 0xFF000002)],
+        ),
+      ]),
+    );
+
+    expect(source, contains('static const Map<String, Color> primary = {'));
+    expect(source, contains('static const Map<String, Color> primary2 = {'));
+    expect(source, contains('Renamed to `primary2`.'));
+  });
+
+  test('a name with nothing usable still yields valid identifiers', () {
+    final source = const DartColorsEmitter().emit(
+      TokenSet([
+        const TokenCategory(
+          name: '---',
+          tokens: [ColorToken(name: '???', argb: 0xFF000001)],
+        ),
+      ]),
+    );
+
+    expect(source, contains('static const Color color = Color(0xFF000001);'));
+    expect(source, contains('static const Map<String, Color> category = {'));
+    expect(source, isNot(contains('Color  =')));
+  });
+
   test('a quote or newline in the import cannot break the import line', () {
     // Palette keys are normalised by Naming before they get here, so the
     // literal escaping exists for the one string that reaches the output

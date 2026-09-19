@@ -91,12 +91,22 @@ class DartColorsEmitter implements TokenEmitter {
 
   /// The comment written above a member the collision rule had to rename.
   ///
+  /// [against] finishes the first sentence — what the name collided with.
   /// Split across two lines so the generated file stays inside 80 columns for
   /// realistic token names.
-  static String _renameNote(String indent, String authored, String emitted) =>
-      '$indent// `$authored` collides with an earlier token in this '
-      'category.\n'
+  static String _renameNote(
+    String indent,
+    String authored,
+    String emitted, {
+    String against = 'token in this category',
+  }) =>
+      '$indent// `$authored` collides with an earlier $against.\n'
       '$indent// Renamed to `$emitted`.\n';
+
+  /// [name], or [fallback] when the authored name held nothing a Dart
+  /// identifier can be made from.
+  static String _orFallback(String name, String fallback) =>
+      name.isEmpty ? fallback : name;
 
   void _writeHeader(StringBuffer buffer) {
     final text =
@@ -127,7 +137,10 @@ class DartColorsEmitter implements TokenEmitter {
       first = false;
       buffer.writeln('  // ${category.name}');
       for (final token in category.tokens) {
-        final requested = Naming.memberName(category.name, token.name);
+        final requested = _orFallback(
+          Naming.memberName(category.name, token.name),
+          'color',
+        );
         final name = _unique(requested, taken);
         if (name != requested) {
           buffer.write(_renameNote('  ', token.name, name));
@@ -146,14 +159,26 @@ class DartColorsEmitter implements TokenEmitter {
       ..writeln('abstract final class $paletteClassName {');
 
     var first = true;
+    final takenFields = <String>{};
     for (final category in tokens.categories) {
       if (category.isEmpty) continue;
       if (!first) buffer.writeln();
       first = false;
-      final field = Naming.toLowerCamelCase(category.name);
-      buffer
-        ..writeln('  /// Tokens under the `${category.name}` category.')
-        ..writeln('  static const Map<String, Color> $field = {');
+      // Categories `Primary` and `primary` are distinct in the JSON but both
+      // camel-case to `primary`, and a name with no letters or digits at all
+      // camel-cases to nothing — neither may reach the output as it is.
+      final requested = _orFallback(
+        Naming.toLowerCamelCase(category.name),
+        'category',
+      );
+      final field = _unique(requested, takenFields);
+      buffer.writeln('  /// Tokens under the `${category.name}` category.');
+      if (field != requested) {
+        buffer.write(
+          _renameNote('  ', category.name, field, against: 'category'),
+        );
+      }
+      buffer.writeln('  static const Map<String, Color> $field = {');
       final taken = <String>{};
       for (final token in category.tokens) {
         final requested = Naming.toLowerCamelCaseLabel(token.name);

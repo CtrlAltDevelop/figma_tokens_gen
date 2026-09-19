@@ -170,4 +170,20 @@ void main() {
       ),
     );
   });
+
+  test('skips Tokens Studio bookkeeping files in a directory', () async {
+    // `$themes.json` is an array, which is not a token document and used to
+    // fail the whole run.
+    writeTokens('a.json', '{"primary": {"main": {"\$value": "#1A2B3C"}}}');
+    writeTokens(r'$themes.json', '[{"id": "x", "name": "Base"}]');
+    writeTokens(r'$metadata.json', '{"tokenSetOrder": ["a"]}');
+
+    final result = await TokenConverter().convert(
+      inputPath: input,
+      outputPath: output,
+    );
+
+    expect(result.inputFiles.map(p.basename), ['a.json']);
+    expect(result.colorCount, 1);
+  });
 }

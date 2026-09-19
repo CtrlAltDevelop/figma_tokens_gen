@@ -109,10 +109,20 @@ class TokenConverter {
             .listSync(recursive: true, followLinks: false)
             .whereType<File>()
             .where((file) => p.extension(file.path).toLowerCase() == '.json')
+            .where((file) => !_isMetadata(file))
             .toList()
           // Sorted so a repeated token name resolves deterministically rather
           // than depending on filesystem enumeration order.
           ..sort((a, b) => a.path.compareTo(b.path));
     return files;
   }
+
+  /// Whether [file] is plugin bookkeeping rather than a token document.
+  ///
+  /// Tokens Studio writes `$themes.json` (an array, so not a token document
+  /// at all) and `$metadata.json` next to the token sets. The parser already
+  /// ignores those names as keys; here they are ignored as files, so they do
+  /// not fail the run. A file named on its own as the input is still read.
+  bool _isMetadata(File file) =>
+      _parser.ignoredKeys.contains(p.basenameWithoutExtension(file.path));
 }

@@ -50,7 +50,7 @@ Or add it to `pubspec.yaml` yourself. It is a build-time tool, so it belongs in
 
 ```yaml
 dev_dependencies:
-  figma_tokens_gen: ">=1.1.1 <2.0.0"
+  figma_tokens_gen: ">=1.1.2 <2.0.0"
 ```
 
 then:
@@ -110,11 +110,20 @@ can be mixed within a single file, which is what a partly re-exported token set
 looks like in practice.
 
 Colour values may be `#RGB`, `#RGBA`, `#RRGGBB`, `#RRGGBBAA`, a `{"hex": ...}`
-map with an optional `a` field, or `{"r":…, "g":…, "b":…, "a":…}` channels in
-either 0–1 or 0–255 form.
+map with an optional `a` (or `alpha`) field, `{"r":…, "g":…, "b":…, "a":…}`
+channels in either 0–1 or 0–255 form, or the W3C colour object Figma's variable
+export writes — `{"colorSpace": "srgb", "components": [r, g, b], "alpha": …,
+"hex": …}`. Its `alpha` is applied to the `hex`, which carries none; components
+in a colour space other than `srgb` are not converted, so those tokens need a
+`hex`.
 
 Non-colour tokens (spacing, typography) and plugin metadata keys (`$extensions`,
-`$themes`, `$metadata`) are skipped.
+`$themes`, `$metadata`) are skipped. A token is not a colour when it declares
+another type — `$type`, or `type` in the legacy shape, on the token or on a
+group above it — which is what keeps a font weight of `"700"` from being read
+as the hex colour `#770000`. Tokens that declare no type are taken as colours
+when their value parses as one. Inside an input directory, Tokens Studio's
+`$themes.json` and `$metadata.json` are skipped as files.
 
 ### Nested groups
 

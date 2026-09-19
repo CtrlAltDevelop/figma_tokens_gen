@@ -268,4 +268,108 @@ void main() {
       expect(tokens.warnings, isEmpty, reason: 'not treated as an alias');
     });
   });
+
+  group('token types', () {
+    test('a token declaring another type is not a colour', () {
+      // Bare hex is accepted without its `#`, so these values are all valid
+      // hex digits and would each come out as a colour if the type were not
+      // consulted: 700 -> #770000, 1234 -> #11223344, 128 -> #112288.
+      final tokens = _parser.parseJson(r'''
+      {
+        "font": {
+          "weight": {"$value": "700", "$type": "fontWeight"},
+          "size":   {"value": "1234", "type": "fontSizes"}
+        },
+        "space": {"lg": {"$value": "128", "$type": "dimension"}},
+        "color": {"red": {"$value": "#ff0000", "$type": "color"}}
+      }
+      ''');
+
+      expect(tokens.categories.map((c) => c.name), ['color']);
+      expect(tokens.warnings, isEmpty);
+    });
+
+    test('a type declared on the group covers every token below it', () {
+      final tokens = _parser.parseJson(r'''
+      {
+        "weights": {
+          "$type": "fontWeight",
+          "body": {"$value": "400"},
+          "deep": {"bold": {"$value": "700"}}
+        },
+        "brand": {"$type": "color", "main": {"$value": "1A2B3C"}}
+      }
+      ''');
+
+      expect(tokens.categories.map((c) => c.name), ['brand']);
+      expect(tokens.categories.single.tokens.single.argb, 0xFF1A2B3C);
+    });
+
+    test('a token type overrides the group type', () {
+      final tokens = _parser.parseJson(r'''
+      {
+        "mixed": {
+          "$type": "dimension",
+          "gap":   {"$value": "128"},
+          "brand": {"$value": "1A2B3C", "$type": "color"}
+        }
+      }
+      ''');
+
+      expect(tokens.categories.single.tokens.map((t) => t.name), ['brand']);
+    });
+
+    test('an alias to a non-colour token is not a colour', () {
+      final tokens = _parser.parseJson(r'''
+      {
+        "font": {"$type": "fontWeight", "bold": {"$value": "700"}},
+        "text": {"weight": {"$value": "{font.bold}"}, "ok": "#111111"}
+      }
+      ''');
+
+      expect(tokens.categories.single.tokens.map((t) => t.name), ['ok']);
+      expect(tokens.warnings, isEmpty);
+    });
+
+    test('an alias still follows a typed colour', () {
+      final tokens = _parser.parseJson(r'''
+      {
+        "base": {"$type": "color", "blue": {"$value": "1A2B3C"}},
+        "text": {"link": {"$value": "{base.blue}"}}
+      }
+      ''');
+
+      expect(tokens.categories.last.tokens.single.argb, 0xFF1A2B3C);
+    });
+
+    test('a type of "color" is matched regardless of case', () {
+      final tokens = _parser.parseJson(
+        r'{"c": {"a": {"value": "#111111", "type": "Color"}}}',
+      );
+
+      expect(tokens.colorCount, 1);
+    });
+  });
+
+  group('root-level tokens', () {
+    test('a bare colour at the root is reported, not dropped silently', () {
+      final tokens = _parser.parseJson(
+        r'{"white": "#FFFFFF", "alias": "{c.a}", "c": {"a": "#000000"}}',
+      );
+
+      expect(tokens.colorCount, 1);
+      expect(
+        tokens.warnings,
+        allOf(hasLength(2), everyElement(contains('root of the document'))),
+      );
+    });
+
+    test('a root string that is not a colour is left alone', () {
+      final tokens = _parser.parseJson(
+        r'{"name": "Brand", "version": "100", "c": {"a": "#000000"}}',
+      );
+
+      expect(tokens.warnings, isEmpty);
+    });
+  });
 }
