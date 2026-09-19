@@ -2,7 +2,7 @@ name: figma_tokens_gen
 description: >-
   Generate Flutter Color constants and palette maps from Figma design-token
   JSON exports. Ships a CLI and a customisable library API.
-version: 1.1.0
+version: 1.1.1
 repository: https://github.com/CtrlAltDevelop/figma_tokens_gen
 issue_tracker: https://github.com/CtrlAltDevelop/figma_tokens_gen/issues
 
@@ -16,13 +16,13 @@ environment:
   sdk: ^3.12.0
 
 dependencies:
-  args: ^2.7.0
-  meta: ^1.19.0
-  path: ^1.9.1
+  args: ">=2.7.0 <3.0.0"
+  meta: ">=1.19.0 <2.0.0"
+  path: ">=1.9.1 <2.0.0"
 
 dev_dependencies:
-  lints: ^6.1.0
-  test: ^1.31.2
+  lints: ">=6.0.0 <7.0.0"
+  test: ">=1.31.0 <2.0.0"
 
 executables:
   figma_tokens_gen:

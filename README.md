@@ -1,5 +1,10 @@
 # figma_tokens_gen
 
+[![pub package](https://img.shields.io/pub/v/figma_tokens_gen.svg)](https://pub.dev/packages/figma_tokens_gen)
+[![pub points](https://img.shields.io/pub/points/figma_tokens_gen)](https://pub.dev/packages/figma_tokens_gen/score)
+[![CI](https://github.com/CtrlAltDevelop/figma_tokens_gen/actions/workflows/ci.yml/badge.svg)](https://github.com/CtrlAltDevelop/figma_tokens_gen/actions/workflows/ci.yml)
+[![license: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](https://github.com/CtrlAltDevelop/figma_tokens_gen/blob/main/LICENSE)
+
 Generate Flutter `Color` constants and palette maps from Figma design-token
 JSON exports.
 
@@ -15,16 +20,16 @@ Container(color: AppColors.primaryMain);
 
 | | Version |
 | --- | --- |
-| Dart SDK | 3.13.0 or newer |
-| Flutter (for the generated code) | 3.47.0 or newer |
+| Dart SDK | 3.12.0 or newer |
+| Flutter (for the generated code) | 3.44.0 or newer |
 
-Flutter 3.47 moved the Material widgets into their own
+Flutter 3.44 moved the Material widgets into their own
 [`material_ui`](https://pub.dev/packages/material_ui) package, so that is what
 the generated file imports:
 
 ```yaml
 dependencies:
-  material_ui: ^1.0.0
+  material_ui: ">=1.0.0 <2.0.0"
 ```
 
 On a project still importing `package:flutter/material.dart`, pass
@@ -45,7 +50,7 @@ Or add it to `pubspec.yaml` yourself. It is a build-time tool, so it belongs in
 
 ```yaml
 dev_dependencies:
-  figma_tokens_gen: ^1.0.0
+  figma_tokens_gen: ">=1.1.1 <2.0.0"
 ```
 
 then:

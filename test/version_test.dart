@@ -16,9 +16,9 @@ void main() {
     expect(declared, isNotNull, reason: 'pubspec.yaml declares no version');
 
     final cli = File('bin/figma_tokens_gen.dart').readAsStringSync();
-    final hardCoded = RegExp(r"""_version\s*=\s*['"]([^'"]+)['"]""")
-        .firstMatch(cli)
-        ?.group(1);
+    final hardCoded = RegExp(
+      r"""_version\s*=\s*['"]([^'"]+)['"]""",
+    ).firstMatch(cli)?.group(1);
 
     expect(hardCoded, declared);
   });

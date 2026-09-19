@@ -3,7 +3,7 @@ import 'dart:io';
 import 'package:args/args.dart';
 import 'package:figma_tokens_gen/figma_tokens_gen.dart';
 
-const _version = '1.1.0';
+const _version = '1.1.1';
 
 Future<void> main(List<String> arguments) async {
   final parser = _buildArgParser();
