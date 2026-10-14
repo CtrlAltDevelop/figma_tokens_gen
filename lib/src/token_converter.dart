@@ -13,6 +13,7 @@ class ConversionResult {
     required this.inputFiles,
     required this.outputFile,
     required this.tokens,
+    this.isStale = false,
   });
 
   /// Paths of the token files that were read, in the order they were read.
@@ -22,6 +23,10 @@ class ConversionResult {
   final String outputFile;
 
   final TokenSet tokens;
+
+  /// Only ever `true` after a check-only run: the file on disk does not match
+  /// what the tokens would generate, or does not exist.
+  final bool isStale;
 
   int get colorCount => tokens.colorCount;
   int get categoryCount => tokens.categories.length;
@@ -56,9 +61,15 @@ class TokenConverter {
   /// file inside [outputPath].
   ///
   /// [inputPath] may be a directory (searched recursively) or a single file.
+  ///
+  /// With [checkOnly] nothing is written; [ConversionResult.isStale] says
+  /// whether the file on disk is out of date. Whitespace and commas are
+  /// ignored in the comparison, so a `dart format` pass over the output does
+  /// not read as drift.
   Future<ConversionResult> convert({
     required String inputPath,
     required String outputPath,
+    bool checkOnly = false,
   }) async {
     final files = _collectInputFiles(inputPath);
     if (files.isEmpty) {
@@ -83,17 +94,29 @@ class TokenConverter {
       );
     }
 
-    final outputDirectory = Directory(outputPath);
-    await outputDirectory.create(recursive: true);
     final outputFile = File(p.join(outputPath, _emitter.fileName));
-    await outputFile.writeAsString(_emitter.emit(tokens));
+    final source = _emitter.emit(tokens);
+    var stale = false;
+    if (checkOnly) {
+      stale =
+          !outputFile.existsSync() ||
+          _significant(await outputFile.readAsString()) != _significant(source);
+    } else {
+      await Directory(outputPath).create(recursive: true);
+      await outputFile.writeAsString(source);
+    }
 
     return ConversionResult(
       inputFiles: files.map((f) => f.path).toList(growable: false),
       outputFile: outputFile.path,
       tokens: tokens,
+      isStale: stale,
     );
   }
+
+  /// [source] without what a formatter may change: whitespace and commas.
+  static String _significant(String source) =>
+      source.replaceAll(RegExp(r'[\s,]+'), '');
 
   List<File> _collectInputFiles(String inputPath) {
     final asFile = File(inputPath);

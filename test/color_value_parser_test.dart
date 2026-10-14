@@ -24,6 +24,27 @@ void main() {
     });
   });
 
+  group('CSS functions', () {
+    test('reads rgb and rgba, comma or space syntax', () {
+      expect(ColorValueParser.parse('rgb(26, 43, 60)'), 0xFF1A2B3C);
+      expect(ColorValueParser.parse('rgba(255, 0, 0, 0.5)'), 0x80FF0000);
+      expect(ColorValueParser.parse('RGB(255 0 0 / 50%)'), 0x80FF0000);
+      expect(ColorValueParser.parse('rgb(100%, 0%, 0%)'), 0xFFFF0000);
+    });
+
+    test('reads hsl and hsla', () {
+      expect(ColorValueParser.parse('hsl(0, 100%, 50%)'), 0xFFFF0000);
+      expect(ColorValueParser.parse('hsl(120deg 100% 50%)'), 0xFF00FF00);
+      expect(ColorValueParser.parse('hsla(240, 100%, 50%, 0.5)'), 0x800000FF);
+    });
+
+    test('rejects malformed functions', () {
+      expect(ColorValueParser.parse('rgb(1, 2)'), isNull);
+      expect(ColorValueParser.parse('rgb(a, b, c)'), isNull);
+      expect(ColorValueParser.parse('rgb(1, 2, 3'), isNull);
+    });
+  });
+
   group('maps', () {
     test('reads the hex field', () {
       expect(ColorValueParser.parse({'hex': '#1A2B3C'}), 0xFF1A2B3C);

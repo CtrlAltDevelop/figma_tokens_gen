@@ -351,6 +351,24 @@ void main() {
     });
   });
 
+  group('unreadable colours', () {
+    test('a token declared a colour that cannot be read is reported', () {
+      final tokens = const TokenParser().parseJson(
+        '{"c": {"ok": {"\$value": "#fff", "\$type": "color"},'
+        ' "bad": {"\$value": "oklch(0.5 0.1 200)", "\$type": "color"}}}',
+      );
+      expect(tokens.colorCount, 1);
+      expect(tokens.warnings.single, contains('c/bad'));
+    });
+
+    test('an untyped value that is not a colour stays silent', () {
+      final tokens = const TokenParser().parseJson(
+        '{"c": {"ok": "#fff", "label": "hello"}}',
+      );
+      expect(tokens.warnings, isEmpty);
+    });
+  });
+
   group('root-level tokens', () {
     test('a bare colour at the root is reported, not dropped silently', () {
       final tokens = _parser.parseJson(

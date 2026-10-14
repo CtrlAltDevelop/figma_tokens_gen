@@ -78,6 +78,44 @@ void main() {
     );
   });
 
+  test('checkOnly reports drift without writing', () async {
+    writeTokens('a.json', '{"primary": {"main": "#FFFFFF"}}');
+
+    var result = await TokenConverter().convert(
+      inputPath: input,
+      outputPath: output,
+      checkOnly: true,
+    );
+    expect(result.isStale, isTrue, reason: 'nothing generated yet');
+    expect(File(result.outputFile).existsSync(), isFalse);
+
+    await TokenConverter().convert(inputPath: input, outputPath: output);
+    result = await TokenConverter().convert(
+      inputPath: input,
+      outputPath: output,
+      checkOnly: true,
+    );
+    expect(result.isStale, isFalse);
+
+    // A formatter reflowing the file is not drift; a changed token is.
+    final file = File(result.outputFile);
+    file.writeAsStringSync(file.readAsStringSync().replaceAll(' = ', '  =\n'));
+    result = await TokenConverter().convert(
+      inputPath: input,
+      outputPath: output,
+      checkOnly: true,
+    );
+    expect(result.isStale, isFalse);
+
+    writeTokens('a.json', '{"primary": {"main": "#000000"}}');
+    result = await TokenConverter().convert(
+      inputPath: input,
+      outputPath: output,
+      checkOnly: true,
+    );
+    expect(result.isStale, isTrue);
+  });
+
   test('throws when the input path does not exist', () {
     expect(
       () => TokenConverter().convert(

@@ -3,7 +3,7 @@ import 'dart:io';
 import 'package:args/args.dart';
 import 'package:figma_tokens_gen/figma_tokens_gen.dart';
 
-const _version = '1.1.2';
+const _version = '1.2.0';
 
 Future<void> main(List<String> arguments) async {
   final parser = _buildArgParser();
@@ -29,6 +29,7 @@ Future<void> main(List<String> arguments) async {
   }
 
   final quiet = args.flag('quiet');
+  final check = args.flag('check');
   final converter = TokenConverter(
     emitter: DartColorsEmitter(
       className: args.option('class-name')!,
@@ -43,9 +44,18 @@ Future<void> main(List<String> arguments) async {
     final result = await converter.convert(
       inputPath: args.option('input')!,
       outputPath: args.option('output')!,
+      checkOnly: check,
     );
     _reportWarnings(result.warnings);
-    if (!quiet) _report(result);
+    if (result.isStale) {
+      stderr.writeln(
+        'Error: ${result.outputFile} is out of date. '
+        'Run figma_tokens_gen without --check to regenerate it.',
+      );
+      exitCode = 1;
+      return;
+    }
+    if (!quiet) _report(result, check: check);
     if (args.flag('strict') && result.warnings.isNotEmpty) {
       stderr.writeln(
         'Error: ${result.warnings.length} warning(s) with --strict.',
@@ -118,6 +128,13 @@ ArgParser _buildArgParser() => ArgParser()
         'Warnings are printed either way.',
   )
   ..addFlag(
+    'check',
+    negatable: false,
+    help:
+        'Write nothing; exit non-zero if the generated file is missing or\n'
+        'out of date. For CI.',
+  )
+  ..addFlag(
     'quiet',
     abbr: 'q',
     negatable: false,
@@ -141,13 +158,13 @@ void _reportWarnings(List<String> warnings) {
   }
 }
 
-void _report(ConversionResult result) {
+void _report(ConversionResult result, {required bool check}) {
   stdout.writeln('Read ${result.inputFiles.length} token file(s):');
   for (final file in result.inputFiles) {
     stdout.writeln('  $file');
   }
   stdout.writeln(
-    'Wrote ${result.colorCount} colours across ${result.categoryCount} '
-    'categories to ${result.outputFile}',
+    '${check ? 'Up to date:' : 'Wrote'} ${result.colorCount} colours across '
+    '${result.categoryCount} categories in ${result.outputFile}',
   );
 }

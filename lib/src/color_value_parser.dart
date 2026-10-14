@@ -11,12 +11,16 @@
 /// `alpha` is applied on top of it; without a `hex`, an sRGB `components` list
 /// is used directly. Other colour spaces need a real conversion and are left
 /// to their `hex`.
+///
+/// CSS colour functions — `rgb(…)`, `rgba(…)`, `hsl(…)`, `hsla(…)`, in the
+/// comma or the space-and-slash syntax — are read as well; Tokens Studio writes
+/// a translucent colour that way.
 abstract final class ColorValueParser {
   static final RegExp _hexPattern = RegExp(r'^[0-9A-Fa-f]+$');
 
   /// Returns the ARGB value for [value], or `null` when it is not a colour.
   static int? parse(Object? value) {
-    if (value is String) return _fromHexString(value);
+    if (value is String) return _fromHexString(value) ?? _fromFunction(value);
     if (value is Map) return _fromMap(value);
     return null;
   }
@@ -55,6 +59,66 @@ abstract final class ColorValueParser {
     final b = _channel(map['b']);
     return r == null || g == null || b == null ? null : (r, g, b);
   }
+
+  static final RegExp _function = RegExp(
+    r'^(rgba?|hsla?)\(\s*([^()]*?)\s*\)$',
+    caseSensitive: false,
+  );
+  static final RegExp _functionSeparator = RegExp(r'[\s,/]+');
+  static final RegExp _functionArgument = RegExp(
+    r'^([+-]?(?:\d+\.?\d*|\.\d+))(%|deg)?$',
+  );
+
+  /// `rgb(255, 0, 0)`, `rgba(255 0 0 / 50%)`, `hsl(210, 50%, 40%)`.
+  static int? _fromFunction(String source) {
+    final match = _function.firstMatch(source.trim());
+    if (match == null) return null;
+    final args = match[2]!.split(_functionSeparator);
+    if (args.length != 3 && args.length != 4) return null;
+
+    final numbers = <(double, String?)>[];
+    for (final arg in args) {
+      final parsed = _functionArgument.firstMatch(arg);
+      if (parsed == null) return null;
+      numbers.add((double.parse(parsed[1]!), parsed[2]));
+    }
+
+    int alpha = 255;
+    if (numbers.length == 4) {
+      final (value, unit) = numbers[3];
+      alpha = _clamp255((unit == '%' ? value / 100 : value) * 255);
+    }
+
+    final int r, g, b;
+    if (match[1]!.toLowerCase().startsWith('rgb')) {
+      int channel((double, String?) n) =>
+          _clamp255(n.$2 == '%' ? n.$1 * 255 / 100 : n.$1);
+      r = channel(numbers[0]);
+      g = channel(numbers[1]);
+      b = channel(numbers[2]);
+    } else {
+      // Saturation and lightness are percentages whether or not they say so.
+      final h = ((numbers[0].$1 % 360) + 360) % 360 / 360;
+      final s = (numbers[1].$1 / 100).clamp(0.0, 1.0);
+      final l = (numbers[2].$1 / 100).clamp(0.0, 1.0);
+      final q = l < 0.5 ? l * (1 + s) : l + s - l * s;
+      final p = 2 * l - q;
+      double hue(double t) {
+        t = (t % 1 + 1) % 1;
+        if (t < 1 / 6) return p + (q - p) * 6 * t;
+        if (t < 1 / 2) return q;
+        if (t < 2 / 3) return p + (q - p) * (2 / 3 - t) * 6;
+        return p;
+      }
+
+      r = _clamp255(hue(h + 1 / 3) * 255);
+      g = _clamp255(hue(h) * 255);
+      b = _clamp255(hue(h - 1 / 3) * 255);
+    }
+    return (alpha << 24) | (r << 16) | (g << 8) | b;
+  }
+
+  static int _clamp255(double value) => value.round().clamp(0, 255);
 
   /// Accepts `#RGB`, `#RGBA`, `#RRGGBB` and `#RRGGBBAA`, with or without the
   /// leading `#`. Figma writes trailing alpha; Dart wants it leading.

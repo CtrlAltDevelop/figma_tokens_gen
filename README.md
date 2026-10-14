@@ -50,7 +50,7 @@ Or add it to `pubspec.yaml` yourself. It is a build-time tool, so it belongs in
 
 ```yaml
 dev_dependencies:
-  figma_tokens_gen: ">=1.1.2 <2.0.0"
+  figma_tokens_gen: ">=1.2.0 <2.0.0"
 ```
 
 then:
@@ -80,6 +80,7 @@ dart run figma_tokens_gen --input tokens --output lib/generated/theme
 | `--file-name` | `app_colors.dart` | Name of the generated file |
 | `--material-import` | `package:material_ui/material_ui.dart` | Import the generated file uses for `Color` |
 | `--no-palettes` | _(palettes on)_ | Skip the `Map<String, Color>` class |
+| `--check` | off | Write nothing; exit non-zero if the generated file is missing or out of date |
 | `--strict` | off | Exit non-zero if any token was skipped |
 | `-q, --quiet` | off | Suppress progress output (warnings still print) |
 
@@ -109,7 +110,8 @@ your Figma plugin does not require changing anything here — and the two shapes
 can be mixed within a single file, which is what a partly re-exported token set
 looks like in practice.
 
-Colour values may be `#RGB`, `#RGBA`, `#RRGGBB`, `#RRGGBBAA`, a `{"hex": ...}`
+Colour values may be `#RGB`, `#RGBA`, `#RRGGBB`, `#RRGGBBAA`, a CSS
+`rgb()`, `rgba()`, `hsl()` or `hsla()` string, a `{"hex": ...}`
 map with an optional `a` (or `alpha`) field, `{"r":…, "g":…, "b":…, "a":…}`
 channels in either 0–1 or 0–255 form, or the W3C colour object Figma's variable
 export writes — `{"colorSpace": "srgb", "components": [r, g, b], "alpha": …,
@@ -272,6 +274,13 @@ dart format lib/generated/theme
 
 Commit the generated file. Checking it in keeps builds reproducible and makes
 token changes visible in review.
+
+In CI, `--check` fails the build when the committed file no longer matches the
+tokens, without touching the working tree:
+
+```bash
+dart run figma_tokens_gen -i tokens -o lib/generated/theme --check
+```
 
 ## License
 

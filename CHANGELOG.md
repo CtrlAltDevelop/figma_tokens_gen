@@ -1,5 +1,29 @@
 # Changelog
 
+## 1.2.0
+
+### Added
+
+- **CSS colour functions.** `rgb()`, `rgba()`, `hsl()` and `hsla()` values —
+  comma or space-and-slash syntax, percentages, `deg` — are read as colours.
+  Tokens Studio writes a translucent colour as `rgba(…)`, and those tokens were
+  silently missing from the output.
+- **`--check`.** Writes nothing and exits non-zero when the generated file is
+  missing or out of date, for a CI step that catches a token change nobody
+  regenerated. Whitespace and commas are ignored in the comparison, so a
+  `dart format` pass over the output is not drift. Library callers pass
+  `checkOnly: true` to `TokenConverter.convert` and read
+  `ConversionResult.isStale`.
+- **Automated publishing.** Pushing a `vX.Y.Z` tag from `main` publishes to
+  pub.dev from GitHub Actions, after checking the tag matches the pubspec
+  version and has a CHANGELOG entry.
+
+### Fixed
+
+- **A token declared `color` whose value could not be read vanished without a
+  warning.** It is now reported, and `--strict` fails on it. An untyped value
+  that is not a colour is still skipped quietly.
+
 ## 1.1.2
 
 ### Fixed

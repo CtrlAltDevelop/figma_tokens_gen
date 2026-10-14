@@ -310,11 +310,24 @@ class TokenParser {
     final visited = <String>{};
 
     for (var hop = 0; hop <= maxAliasHops; hop++) {
-      if (!_isColourType(_typeOf(node) ?? inherited)) return null;
+      final type = _typeOf(node) ?? inherited;
+      if (!_isColourType(type)) return null;
 
       final raw = _unwrap(node);
       final reference = _referenceOf(raw);
-      if (reference == null) return ColorValueParser.parse(raw);
+      if (reference == null) {
+        final argb = ColorValueParser.parse(raw);
+        // An untyped value that is not a colour is probably not meant as one;
+        // a token that says it is `color` and cannot be read is a mistake
+        // worth surfacing, not a silent hole in the generated file.
+        if (argb == null && type != null) {
+          warnings.add(
+            'Token "$label" is declared a colour, but its value could not '
+            'be read as one. It was skipped.',
+          );
+        }
+        return argb;
+      }
 
       if (!visited.add(reference)) {
         warnings.add(
