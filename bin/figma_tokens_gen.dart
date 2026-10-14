@@ -2,8 +2,9 @@ import 'dart:io';
 
 import 'package:args/args.dart';
 import 'package:figma_tokens_gen/figma_tokens_gen.dart';
+import 'package:path/path.dart' as p;
 
-const _version = '1.2.0';
+const _version = '1.2.1';
 
 Future<void> main(List<String> arguments) async {
   final parser = _buildArgParser();
@@ -48,29 +49,22 @@ Future<void> main(List<String> arguments) async {
     );
     _reportWarnings(result.warnings);
     if (result.isStale) {
-      stderr.writeln(
-        'Error: ${result.outputFile} is out of date. '
+      _fail(
+        '${_shown(result.outputFile)} is out of date. '
         'Run figma_tokens_gen without --check to regenerate it.',
       );
-      exitCode = 1;
       return;
     }
     if (!quiet) _report(result, check: check);
     if (args.flag('strict') && result.warnings.isNotEmpty) {
-      stderr.writeln(
-        'Error: ${result.warnings.length} warning(s) with --strict.',
-      );
-      exitCode = 1;
+      _fail('${result.warnings.length} warning(s) with --strict.');
     }
   } on ConversionException catch (e) {
-    stderr.writeln('Error: ${e.message}');
-    exitCode = 1;
+    _fail(e.message);
   } on TokenParseException catch (e) {
-    stderr.writeln('Error: $e');
-    exitCode = 1;
+    _fail('$e');
   } on FileSystemException catch (e) {
-    stderr.writeln('Error: ${e.message} (${e.path})');
-    exitCode = 1;
+    _fail('${e.message} (${e.path})');
   }
 }
 
@@ -154,17 +148,49 @@ ${parser.usage}''';
 /// a token missing from the generated file.
 void _reportWarnings(List<String> warnings) {
   for (final warning in warnings) {
-    stderr.writeln('Warning: $warning');
+    stderr.writeln('${_paint(stderr, '33', '⚠')} $warning');
   }
 }
 
+void _fail(String message) {
+  stderr.writeln('${_paint(stderr, '31', '✗')} $message');
+  exitCode = 1;
+}
+
 void _report(ConversionResult result, {required bool check}) {
-  stdout.writeln('Read ${result.inputFiles.length} token file(s):');
+  final files = result.inputFiles.length;
+  stdout.writeln(
+    _ok('Read ${_bold('$files')} token file${files == 1 ? '' : 's'}'),
+  );
   for (final file in result.inputFiles) {
-    stdout.writeln('  $file');
+    stdout.writeln('    ${_dim(stdout, _shown(file))}');
   }
   stdout.writeln(
-    '${check ? 'Up to date:' : 'Wrote'} ${result.colorCount} colours across '
-    '${result.categoryCount} categories in ${result.outputFile}',
+    _ok(
+      '${check ? 'Up to date' : 'Wrote'} ${_bold('${result.colorCount}')} '
+      'colours in ${_bold('${result.categoryCount}')} '
+      'categor${result.categoryCount == 1 ? 'y' : 'ies'}',
+    ),
   );
+  stdout.writeln('    ${_dim(stdout, _shown(result.outputFile))}');
+}
+
+// --- output styling --------------------------------------------------------
+
+/// Colour only where it will be read by a person: a terminal, with `NO_COLOR`
+/// (https://no-color.org) unset.
+bool _colour(Stdout out) =>
+    out.hasTerminal && !Platform.environment.containsKey('NO_COLOR');
+
+String _paint(Stdout out, String code, String text) =>
+    _colour(out) ? '\x1B[${code}m$text\x1B[0m' : text;
+
+String _ok(String text) => '${_paint(stdout, '32', '✓')} $text';
+String _dim(Stdout out, String text) => _paint(out, '2', text);
+String _bold(String text) => _paint(stdout, '1', text);
+
+/// A path as the user would type it: relative to where they are.
+String _shown(String path) {
+  final relative = p.relative(path);
+  return relative.startsWith('..') ? path : relative;
 }

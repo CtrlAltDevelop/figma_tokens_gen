@@ -1,5 +1,14 @@
 # Changelog
 
+## 1.2.1
+
+### Changed
+
+- **A clearer command-line log.** Progress is printed with `✓`, warnings with
+  `⚠` and errors with `✗`, paths relative to the working directory, and colour
+  when writing to a terminal (`NO_COLOR` is respected). Output piped or written
+  to a CI log stays plain text. No change to the generated code or the API.
+
 ## 1.2.0
 
 ### Added

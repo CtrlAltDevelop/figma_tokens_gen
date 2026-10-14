@@ -50,7 +50,7 @@ Or add it to `pubspec.yaml` yourself. It is a build-time tool, so it belongs in
 
 ```yaml
 dev_dependencies:
-  figma_tokens_gen: ">=1.2.0 <2.0.0"
+  figma_tokens_gen: ">=1.2.1 <2.0.0"
 ```
 
 then:
